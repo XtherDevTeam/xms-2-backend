@@ -3,6 +3,8 @@ import api.utils as utils
 import logging
 import os
 import mimetypes
+import time
+import json
 from typing import Any
 
 
@@ -164,6 +166,9 @@ class dataManager:
     def createUser(self, userName: str, userPassword: str, userSlogan: str, level: int):
         if not utils.checkIfUserNameValid(userName):
             return utils.makeResult(False, "invalid username")
+
+        if self.checkIfUserExistByUserName(userName) is not None:
+            return utils.makeResult(False, "user with the same username already exists")
 
         try:
             # 0 is superadmin, 1 is admin, 2 is user
@@ -375,3 +380,52 @@ class dataManager:
                 return None
         else:
             return None
+
+    def checkUserPlaylistIfExistByPlaylistName(self, uid: int, name: str):
+        d = self.db.query(
+            "select id from playlists where name = ? and owner = ?", (name, uid), one=True)
+        if d is not None:
+            return d['id']  # type: ignore
+        else:
+            return d
+
+    def checkUserPlaylistIfExistByPlaylistId(self, id: int):
+        d = self.db.query(
+            "select id, owner from playlists where id = ?", (id, ), one=True)
+        return d
+
+    def queryUserOwnPlaylists(self, uid: int):
+        data = self.db.query(
+            "select ownPlaylists from users where id = ?", (uid, ), one=True)['ownPlaylists']  # type: ignore
+        return json.loads(data)
+
+    def updateUserOwnPlaylists(self, uid: int, data: list):
+        self.db.query(
+            "update users set ownPlaylists = ? where id = ?", (json.dumps(data), uid))
+        return None
+
+    def createUserPlaylist(self, uid: int, name: str, description: str):
+        if self.checkUserPlaylistIfExistByPlaylistName(uid, name) is not None:
+            return utils.makeResult(False, "playlist with the same playlist name already exists")
+        if self.checkIfUserExistById(uid) is not None:
+            self.db.query("insert into playlists (name, owner, description, creationDate) values (?, ?, ?, ?)",
+                          (name, uid, description, time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time()))))
+
+            playlistId = self.checkUserPlaylistIfExistByPlaylistName(uid, name)
+            data = self.queryUserOwnPlaylists(uid)
+            data.append(playlistId)
+            self.updateUserOwnPlaylists(uid, data)
+            return utils.makeResult(True, playlistId)
+        else:
+            return utils.makeResult(False, "user not exist")
+
+    def deleteUserPlaylistById(self, id: int):
+        data = self.checkUserPlaylistIfExistByPlaylistId(id)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+        else:
+            p = self.queryUserOwnPlaylists(data['owner'])  # type: ignore
+            p.remove(id)
+            self.updateUserOwnPlaylists(data['owner'], p)  # type: ignore
+            self.db.query("delete from playlists where id = ?", (id, ))
+            return utils.makeResult(True, "success")

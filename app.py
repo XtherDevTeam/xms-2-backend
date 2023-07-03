@@ -171,7 +171,8 @@ def routeDriveFile():
                 response = flask.make_response(response_file)
                 response.headers['Accept-Ranges'] = 'bytes'
                 response.headers['Content-Range'] = 'bytes ' + \
-                    str(startIndex) + '-' + str(endIndex) + '/' + str(fileLength)
+                    str(startIndex) + '-' + \
+                    str(endIndex) + '/' + str(fileLength)
                 response.headers['Content-Type'] = result['mime']
                 if response.headers['Content-Type'].startswith('application'):
                     response.headers['Content-Disposition'] = "attachment; filename=" + \
@@ -191,11 +192,11 @@ def routeDriveUpload():
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    
+
     path = flask.request.args.get("path", type=str)
     if path is None or not isinstance(path, str):
         return api.utils.makeResult(False, "invalid request")
-    
+
     for i in flask.request.files:
         j = flask.request.files[i]
         webLogger.info(f"uploading files: {i}")
@@ -204,8 +205,43 @@ def routeDriveUpload():
             j.save(result['data'])
         else:
             return result
-        
+
     return api.utils.makeResult(True, "success")
+
+
+@webApplication.route("/xms/v1/music/playlist/create", methods=["POST"])
+def routeMusicPlaylistCreate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    name = data.get('name')
+    description = data.get('description')
+    if "name" not in data or "description" not in data:
+        return api.utils.makeResult(False, "incomplete request")
+
+    if not isinstance(name, str) or not isinstance(description, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.createUserPlaylist(uid, name, description)
+
+
+@webApplication.route("/xms/v1/music/playlist/delete", methods=["POST"])
+def routeMusicPlaylistDelete():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    id = data.get('id')
+    if not isinstance(id, int):
+        return api.utils.makeResult(False, "invalid request")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:  # type: ignore
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+    return dataManager.deleteUserPlaylistById(id)
+
 
 if __name__ == "__main__":
     # print(dataManager.executeInitScript())
