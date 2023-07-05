@@ -82,6 +82,15 @@ def routeSignUp():
             return api.utils.makeResult(False, "invalid request")
 
 
+@webApplication.route("/xms/v1/user/status", methods=["GET"])
+def routeUserStatus():
+    uid = checkIfLoggedIn()
+    if uid == None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    else:
+        return api.utils.makeResult(True, {"status": "logged in", "uid": uid})
+
+
 @webApplication.route("/xms/v1/user/<uid>/info", methods=["GET"])
 def routeUserInfo(uid):
     uid = int(uid)

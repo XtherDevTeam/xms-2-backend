@@ -273,7 +273,7 @@ class dataManager:
         try:
             d = self.db.query(
                 "select id, name, slogan, level from users where id = ?", (uid, ), one=True)
-            if d is None:
+            if d is not None:
                 return utils.makeResult(True, d)
             else:
                 return utils.makeResult(False, "user not found")
