@@ -396,13 +396,8 @@ class dataManager:
 
     def queryUserOwnPlaylists(self, uid: int):
         data = self.db.query(
-            "select ownPlaylists from users where id = ?", (uid, ), one=True)['ownPlaylists']  # type: ignore
-        return json.loads(data)
-
-    def updateUserOwnPlaylists(self, uid: int, data: list):
-        self.db.query(
-            "update users set ownPlaylists = ? where id = ?", (json.dumps(data), uid))
-        return None
+            "select * from playlists where owner = ?", (uid, ))
+        return data
 
     def createUserPlaylist(self, uid: int, name: str, description: str):
         if self.checkUserPlaylistIfExistByPlaylistName(uid, name) is not None:
@@ -413,8 +408,7 @@ class dataManager:
 
             playlistId = self.checkUserPlaylistIfExistByPlaylistName(uid, name)
             data = self.queryUserOwnPlaylists(uid)
-            data.append(playlistId)
-            self.updateUserOwnPlaylists(uid, data)
+            data.append(playlistId)  # type: ignore
             return utils.makeResult(True, playlistId)
         else:
             return utils.makeResult(False, "user not exist")
@@ -425,7 +419,102 @@ class dataManager:
             return utils.makeResult(False, "playlist not exist")
         else:
             p = self.queryUserOwnPlaylists(data['owner'])  # type: ignore
-            p.remove(id)
+            p.remove(id)  # type: ignore
             self.updateUserOwnPlaylists(data['owner'], p)  # type: ignore
             self.db.query("delete from playlists where id = ?", (id, ))
             return utils.makeResult(True, "success")
+
+    def checkIfSongExistInPlaylistByPath(self, playlistId: int, songPath: str):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+
+        return self.db.query("select id from songlist where path = ? and playlistId = ?", (songPath, playlistId), one=True)
+
+    def checkIfSongExistInPlaylistById(self, playlistId: int, songId: int):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+
+        return self.db.query("select * from songlist where id = ?", (songId, ), one=True)
+
+    def insertSongToPlaylist(self, playlistId: int, songPath: str):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+
+        if self.checkIfSongExistInPlaylistByPath(playlistId, songPath) is not None:
+            return utils.makeResult(False, "the song has already been in the playlist")
+
+        self.db.query(
+            "insert into songlist (path, playlistId) values (?, ?)", (songPath, playlistId))
+        return utils.makeResult(
+            True, self.checkIfSongExistInPlaylistByPath(playlistId, songPath)['id'])  # type: ignore
+
+    def deleteSongFromPlaylist(self, playlistId: int, songId: int):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+
+        if self.checkIfSongExistInPlaylistById(playlistId, songId) is None:
+            return utils.makeResult(False, "the song isn't in the playlist")
+
+        self.db.query("delete from songlist where id = ?", (songId))
+        return utils.makeResult(True, "success")
+
+    def queryUserPlaylistSongs(self, playlistId: int, limit: int, offset: int):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+
+        songs = self.db.query(
+            "select * from songlist where playlistId = ? order by id desc limit ? offset ?", (playlistId, limit, offset))
+
+        for i in songs:  # type: ignore
+            i['info'] = utils.getSongInfo(utils.catchError(  # type: ignore
+                self.logger(), self.queryFileRealpath(data['owner'], i['path']))['path'])  # type: ignore
+
+        return utils.makeResult(True, songs)
+
+    def querySongFromPlaylist(self, songId: int):
+        data = self.db.query(
+            "select path, playlistId from songlist where id = ?", (songId, ), one=True)
+        if data is None:
+            return utils.makeResult(False, "song not exist")
+
+        playlist = self.queryUserPlaylistInfo(
+            data['playlistId'])['data']  # type: ignore
+
+        songInfo = utils.getSongInfo(utils.catchError(  # type: ignore
+            self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path'])  # type: ignore
+        songInfo['owner'] = playlist['owner']
+
+        return utils.makeResult(True, songInfo)
+
+    def querySongArtworkFromPlaylist(self, songId: int):
+        data = self.db.query(
+            "select path, playlistId from songlist where id = ?", (songId, ), one=True)
+        if data is None:
+            return utils.makeResult(False, "song not exist")
+
+        playlist = self.queryUserPlaylistInfo(
+            data['playlistId'])['data']  # type: ignore
+
+        try:
+            return utils.makeResult(True, utils.getSongArtwork(utils.catchError(  # type: ignore
+                self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path']))  # type: ignore
+        except Exception as e:
+            print(e)
+            blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
+
+            with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
+                return utils.makeResult(True, {"artwork": default.read(), "mime": "image/jpeg"})
+
+    def queryUserPlaylistInfo(self, playlistId: int):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+
+        d = self.db.query(
+            "select * from playlists where id = ?", (playlistId, ), one=True)
+        return utils.makeResult(True, d)

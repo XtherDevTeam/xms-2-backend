@@ -119,6 +119,42 @@ def routeUserHeadImg(uid):
         return headImg
 
 
+@webApplication.route("/xms/v1/user/avatar/update", methods=["POST"])
+def routeUserAvatarUpdate(uid):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    avatar = flask.request.files.get('image')
+    if avatar is None:
+        return api.utils.makeResult(False, "invalid request")
+
+    if not avatar.content_type.startswith("image/"):  # type: ignore
+        return api.utils.makeResult(False, "not an image file")
+
+    image = avatar.stream.read()
+
+    return dataManager.updateUserAvatar(uid, image, avatar.content_type)
+
+
+@webApplication.route("/xms/v1/user/headimg/update", methods=["POST"])
+def routeUserHeadImgUpdate(uid):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    headimg = flask.request.files.get('image')
+    if headimg is None:
+        return api.utils.makeResult(False, "invalid request")
+
+    if not headimg.content_type.startswith("image/"):  # type: ignore
+        return api.utils.makeResult(False, "not an image file")
+
+    image = headimg.stream.read()
+
+    return dataManager.updateUserHeadImage(uid, image, headimg.content_type)
+
+
 @webApplication.route("/xms/v1/drive/dir", methods=["GET"])
 def routeDriveDir():
     uid = checkIfLoggedIn()
@@ -252,8 +288,113 @@ def routeMusicPlaylistDelete():
     return dataManager.deleteUserPlaylistById(id)
 
 
+@webApplication.route("/xms/v1/music/playlist/<id>/info", methods=["GET"])
+def routeMusicPlaylistInfo(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:  # type: ignore
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+    return dataManager.queryUserPlaylistInfo(id)
+
+
+@webApplication.route("/xms/v1/music/song/<id>/info", methods=["GET"])
+def routeMusicSongInfo(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    songInfo = dataManager.querySongFromPlaylist(id)
+    if not songInfo['ok']:
+        return songInfo
+
+    songInfo = songInfo['data']
+    if songInfo['owner'] != uid:
+        return api.utils.makeResult(False, "premission denied")
+
+    return api.utils.makeResult(True, songInfo)
+
+
+@webApplication.route("/xms/v1/music/song/<id>/artwork", methods=["GET"])
+def routeMusicSongArtwork(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    songInfo = dataManager.querySongFromPlaylist(id)
+    if not songInfo['ok']:
+        return songInfo
+
+    songInfo = songInfo['data']
+    if songInfo['owner'] != uid:
+        return api.utils.makeResult(False, "premission denied")
+
+    data = dataManager.querySongArtworkFromPlaylist(id)
+    if data['ok']:
+        return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
+    else:
+        return data
+
+
+@webApplication.route("/xms/v1/music/playlist/<id>/songs/<offset>/<limit>", methods=["GET"])
+def routeMusicPlaylistSongs(id, offset, limit):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:  # type: ignore
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+    return dataManager.queryUserPlaylistSongs(id, limit, offset)
+
+
+@webApplication.route("/xms/v1/music/playlist/<id>/songs/insert", methods=["POST"])
+def routeMusicPlaylistSongsInsert(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    path = data.get('songPath')
+    if not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:  # type: ignore
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+    if dataManager.queryFileRealpath(uid, path)['ok']:
+        return dataManager.insertSongToPlaylist(id, path)
+    else:
+        return api.utils.makeResult(False, "file not exist")
+
+
+@webApplication.route("/xms/v1/music/playlist/<id>/songs/delete", methods=["GET"])
+def routeMusicPlaylistSongsDelete(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    sid = data.get('songId')
+    if not isinstance(sid, int):
+        return api.utils.makeResult(False, "invalid request")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:  # type: ignore
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+    return dataManager.deleteSongFromPlaylist(id, sid)
+
+
 if __name__ == "__main__":
-    # print(dataManager.executeInitScript())
+    print(dataManager.executeInitScript())
     webApplication.config["SECRET_KEY"] = 'Fireworks are for now, but friends are forever!'
     webApplication.run(host=api.utils.catchError(webLogger, dataManager.getXmsHost(
     )), port=api.utils.catchError(webLogger, dataManager.getXmsPort()))

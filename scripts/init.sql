@@ -1,6 +1,9 @@
 drop table if exists users;
 drop table if exists config;
 drop table if exists playlists;
+drop table if exists songlist;
+drop table if exists shareLinksList;
+drop table if exists articles;
 
 create table users (
     id                  integer primary key autoincrement,
@@ -12,19 +15,42 @@ create table users (
     headImageMime       string default 'image/jpeg',
     avatar              blob not null,
     avatarMime          string default 'image/jpeg',
-    musicPlaybackCount  string default '{}',
-    ownPlaylists        string default '[]'
+    musicPlaybackCount  string default '{}'
 );
 
-
+-- songs are saved in songlist
 create table playlists (
     id                  integer primary key autoincrement,
     name                string not null,
     owner               integer not null,
     description         string not null,
     creationDate        string not null,
-    playCount           integer default 0,
-    songs               string default '[]'
+    playCount           integer default 0
+);
+
+-- saved the songs from playlist
+create table songlist (
+    id                  integer primary key autoincrement,
+    path                string not null,
+    playlistId          integer not null
+);
+
+
+-- saved users share links
+create table shareLinksList (
+    id                  string primary key,
+    path                string not null,
+    owner               integer not null
+);
+
+
+create table articles (
+    id                  integer primary key,
+    title               string not null,
+    subtitle            string not null,
+    creationTime        string not null,
+    views               string not null,
+    text                string not null
 );
 
 

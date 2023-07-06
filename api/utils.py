@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import music_tag
 
 
 class XmediaCenterException(BaseException):
@@ -46,3 +47,21 @@ def rmdir(path: str):
             os.remove(p)
         else:
             rmdir(p)
+
+
+def getSongInfo(songPath: str):
+    file = music_tag.load_file(songPath)
+    return {
+        'title': file['title'].value,  # type: ignore
+        'album': file['album'].value,  # type: ignore
+        'artist': file['artist'].value,  # type: ignore
+        'composer': file['composer'].value,  # type: ignore
+    }
+
+
+def getSongArtwork(songPath: str):
+    file = music_tag.load_file(songPath)
+    return {
+        'mime': file['artwork'].first.mime,  # type: ignore
+        'artwork': file['artwork'].first.data  # type: ignore
+    }
