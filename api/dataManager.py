@@ -198,10 +198,14 @@ class dataManager:
                 dir = os.listdir(base)
                 for i in dir:
                     fullPath = os.path.join(base, i)
+                    fileStat = os.stat(fullPath)
+                    mime = mimetypes.guess_type(fullPath)[0]
                     files.append({
                         "filename": i,
-                        "path": i,
+                        "path": os.path.join(path, i),
                         "type": "file" if os.path.isfile(fullPath) else "dir",
+                        "lastModified": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(fileStat.st_mtime)),
+                        "mime": mime if mime is not None else "application/octet-stream" if os.path.isfile(fullPath) else "None"
                     })
                     filesCnt += int(os.path.isfile(fullPath))
                 return utils.makeResult(True, {
@@ -226,6 +230,25 @@ class dataManager:
                 return utils.makeResult(True, "success")
             except OSError as e:
                 return utils.makeResult(False, str(e))
+        else:
+            return base
+
+    def renameInUserDrive(self, uid: int, path: str, newName: str):
+        base = self.getUserDrivePath(uid)
+        if base['ok']:
+            base = f"{base['data']}/{path}"
+            os.rename(base, os.path.join(os.path.dirname(base), newName))
+            return utils.makeResult(True, "success")
+        else:
+            return base
+
+    def moveInUserDrive(self, uid: int, path: str, newPath: str):
+        base = self.getUserDrivePath(uid)
+        if base['ok']:
+            newPath = f"{base['data']}/{newPath}"
+            base = f"{base['data']}/{path}"
+            os.rename(base, newPath)
+            return utils.makeResult(True, "success")
         else:
             return base
 

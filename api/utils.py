@@ -47,6 +47,7 @@ def rmdir(path: str):
             os.remove(p)
         else:
             rmdir(p)
+    os.rmdir(path)
 
 
 def getSongInfo(songPath: str):

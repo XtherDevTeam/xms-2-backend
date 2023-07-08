@@ -155,7 +155,7 @@ def routeUserHeadImgUpdate(uid):
     return dataManager.updateUserHeadImage(uid, image, headimg.content_type)
 
 
-@webApplication.route("/xms/v1/drive/dir", methods=["GET"])
+@webApplication.route("/xms/v1/drive/dir", methods=["POST"])
 def routeDriveDir():
     uid = checkIfLoggedIn()
     if uid is None:
@@ -181,13 +181,47 @@ def routeDriveDelete():
     return dataManager.deleteInUserDrive(uid, path)
 
 
+@webApplication.route("/xms/v1/drive/rename", methods=["POST"])
+def routeDriveRename():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    path = data.get('path')
+    newName = data.get('newName')
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    if newName is None or not isinstance(newName, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.renameInUserDrive(uid, path, newName)
+
+
+@webApplication.route("/xms/v1/drive/move", methods=["POST"])
+def routeDriveMove():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    path = data.get('path')
+    newPath = data.get('newPath')
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    if newPath is None or not isinstance(newPath, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.moveInUserDrive(uid, path, newPath)
+
+
 @webApplication.route("/xms/v1/drive/file", methods=["GET"])
 def routeDriveFile():
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    data = flask.request.get_json()
-    path = data.get('path')
+
+    path = flask.request.args.get('path')
     if path is None or not isinstance(path, str):
         return api.utils.makeResult(False, "invalid request")
 
@@ -195,7 +229,7 @@ def routeDriveFile():
         result = dataManager.queryFileRealpath(uid, path)
         if result['ok']:
             result = result['data']
-            isPreview = result['mime'].startswith('application')
+            isPreview = not result['mime'].startswith('application')
             if flask.request.headers.get('Range') != None:
                 startIndex = 0
                 part_length = 2 * 1024 * 1024
@@ -394,7 +428,7 @@ def routeMusicPlaylistSongsDelete(id):
 
 
 if __name__ == "__main__":
-    print(dataManager.executeInitScript())
+    # print(dataManager.executeInitScript())
     webApplication.config["SECRET_KEY"] = 'Fireworks are for now, but friends are forever!'
     webApplication.run(host=api.utils.catchError(webLogger, dataManager.getXmsHost(
     )), port=api.utils.catchError(webLogger, dataManager.getXmsPort()))
