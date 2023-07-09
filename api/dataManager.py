@@ -226,7 +226,7 @@ class dataManager:
         if base['ok']:
             base = f"{base['data']}/{path}"
             try:
-                os.makedirs(base, 777)
+                os.makedirs(base, 0o777)
                 return utils.makeResult(True, "success")
             except OSError as e:
                 return utils.makeResult(False, str(e))
@@ -245,9 +245,9 @@ class dataManager:
     def moveInUserDrive(self, uid: int, path: str, newPath: str):
         base = self.getUserDrivePath(uid)
         if base['ok']:
-            newPath = f"{base['data']}/{newPath}"
-            base = f"{base['data']}/{path}"
-            os.rename(base, newPath)
+            newBase = f"{base['data']}/{path}"
+            newPath = f"{base['data']}/{newPath}/{os.path.basename(newBase)}"
+            os.rename(newBase, newPath)
             return utils.makeResult(True, "success")
         else:
             return base

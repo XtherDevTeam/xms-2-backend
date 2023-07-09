@@ -4,6 +4,7 @@ import requests
 import logging
 import time
 import os
+import re
 from io import BytesIO
 
 import api.dataManager
@@ -15,6 +16,8 @@ dataManager = api.dataManager.dataManager(database, "./root")
 
 webLogger = logging.Logger("webApplication")
 webApplication = flask.Flask(__name__)
+
+flask_cors.CORS(webApplication)
 
 
 def checkIfLoggedIn():
@@ -35,7 +38,9 @@ def routeInfo():
         "coreCodeName": api.xms.xmsCoreCodeName,
         "coreBuildNumber": api.xms.xmsCoreBuildNumber,
         "xmsProjectAuthor": api.xms.xmsProjectAuthor,
-        "serverTime": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time()))
+        "serverTime": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time())),
+        "instanceName": api.xms.xmsInstanceName,
+        "instanceDescription": api.xms.xmsInstanceDescription,
     }
 
 
@@ -168,6 +173,26 @@ def routeDriveDir():
     return dataManager.getUserDriveDirInfo(uid, path)
 
 
+@webApplication.route("/xms/v1/drive/createdir", methods=["POST"])
+def routeDriveCreateDir():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    path = data.get('path')
+    name = data.get('name')
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    if name is None or not isinstance(name, str):
+        return api.utils.makeResult(False, "invalid request")
+    
+    result = re.match(r'[^~\x22/\(\)\&\[\]\{\}]+', name)
+    if result is None or result.group() != name:
+        return api.utils.makeResult(False, "invalid folder name")
+
+    return dataManager.createDirInUserDrive(uid, os.path.join(path, name))
+
+
 @webApplication.route("/xms/v1/drive/delete", methods=["POST"])
 def routeDriveDelete():
     uid = checkIfLoggedIn()
@@ -278,8 +303,8 @@ def routeDriveUpload():
 
     for i in flask.request.files:
         j = flask.request.files[i]
-        webLogger.info(f"uploading files: {i}")
-        result = dataManager.queryFileUploadRealpath(uid, f"{path}/{i}")
+        webLogger.info(f"uploading files: {i} {j.filename}")
+        result = dataManager.queryFileUploadRealpath(uid, f"{path}/{j.filename}")
         if result['ok']:
             j.save(result['data'])
         else:
