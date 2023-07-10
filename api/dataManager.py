@@ -338,10 +338,18 @@ class dataManager:
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
 
-    def updateUserInfo(self, uid: int, userName: str, userSlogan: str):
+    def updateUserUsername(self, uid: int, newUserName: str):
         try:
             d = self.db.query(
-                "update users set name = ?, slogan = ? where id = ?", (userName, userSlogan, uid))
+                "update users set name = ? where id = ?", (newUserName, uid))
+            return utils.makeResult(True, d)
+        except sqlite3.Error as e:
+            return utils.makeResult(False, str(e))
+
+    def updateUserSlogan(self, uid: int, newSlogan: str):
+        try:
+            d = self.db.query(
+                "update users set slogan = ? where id = ?", (newSlogan, uid))
             return utils.makeResult(True, d)
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
@@ -383,7 +391,7 @@ class dataManager:
         if uid is not None:
             try:
                 self.db.query(
-                    "update users set headImage = ?, headImageMime = ? where id = ?", (headImage, mime, ))
+                    "update users set headImage = ?, headImageMime = ? where id = ?", (headImage, mime, uid))
                 return utils.makeResult(True, "success")
             except sqlite3.Error as e:
                 return utils.makeResult(False, str(e))

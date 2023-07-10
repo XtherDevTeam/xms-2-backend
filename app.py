@@ -136,6 +136,12 @@ def routeUserInfo(uid):
     return dataManager.queryUser(uid)
 
 
+@webApplication.route("/xms/v1/user/<uid>/sharelinks", methods=["GET"])
+def routeUserShareLinks(uid):
+    uid = int(uid)
+    return dataManager.queryUserShareLinks(uid)
+
+
 @webApplication.route("/xms/v1/user/<uid>/avatar", methods=["GET"])
 def routeUserAvatar(uid):
     uid = int(uid)
@@ -158,8 +164,36 @@ def routeUserHeadImg(uid):
         return headImg
 
 
+@webApplication.route("/xms/v1/user/username/update", methods=["POST"])
+def routeUserUsernameUpdate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    newUsername = data.get('newUsername')
+    if newUsername is None or not isinstance(newUsername, str) or len(newUsername) == 0:
+        return api.utils.makeResult(False, "invalid request")
+    
+    return dataManager.updateUserUsername(uid, newUsername)
+
+
+@webApplication.route("/xms/v1/user/slogan/update", methods=["POST"])
+def routeUserSloganUpdate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    newSlogan = data.get('newSlogan')
+    if newSlogan is None or not isinstance(newSlogan, str) or len(newSlogan) == 0:
+        return api.utils.makeResult(False, "invalid request")
+    
+    return dataManager.updateUserSlogan(uid, newSlogan)
+
+
 @webApplication.route("/xms/v1/user/avatar/update", methods=["POST"])
-def routeUserAvatarUpdate(uid):
+def routeUserAvatarUpdate():
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
@@ -177,7 +211,7 @@ def routeUserAvatarUpdate(uid):
 
 
 @webApplication.route("/xms/v1/user/headimg/update", methods=["POST"])
-def routeUserHeadImgUpdate(uid):
+def routeUserHeadImgUpdate():
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
