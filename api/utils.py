@@ -2,6 +2,11 @@ import hashlib
 import logging
 import os
 import music_tag
+import random
+import time
+import mimetypes
+
+random.seed(int(time.time() * 100))
 
 
 class XmediaCenterException(BaseException):
@@ -65,4 +70,19 @@ def getSongArtwork(songPath: str):
     return {
         'mime': file['artwork'].first.mime,  # type: ignore
         'artwork': file['artwork'].first.data  # type: ignore
+    }
+
+
+def getRandom10CharString(salt):
+    return hashlib.md5(f'{int(time.time() * 100)}{str(salt)}{random.randint(0, 114514191)}'.encode('utf-8')).hexdigest()[0:10]
+
+
+def getPathInfo(path: str):
+    fileStat = os.stat(path)
+    mime = mimetypes.guess_type(path)[0]
+    return {
+        "filename": os.path.basename(path),
+        "type": "file" if os.path.isfile(path) else "dir",
+        "lastModified": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(fileStat.st_mtime)),
+        "mime": mime if mime is not None else "application/octet-stream" if os.path.isfile(path) else "None"
     }

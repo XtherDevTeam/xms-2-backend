@@ -198,16 +198,10 @@ class dataManager:
                 dir = os.listdir(base)
                 for i in dir:
                     fullPath = os.path.join(base, i)
-                    fileStat = os.stat(fullPath)
-                    mime = mimetypes.guess_type(fullPath)[0]
-                    files.append({
-                        "filename": i,
-                        "path": os.path.join(path, i),
-                        "type": "file" if os.path.isfile(fullPath) else "dir",
-                        "lastModified": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(fileStat.st_mtime)),
-                        "mime": mime if mime is not None else "application/octet-stream" if os.path.isfile(fullPath) else "None"
-                    })
-                    filesCnt += int(os.path.isfile(fullPath))
+                    fileInfo = utils.getPathInfo(fullPath)
+                    fileInfo["path"] = os.path.join(path, i)
+                    files.append(fileInfo)
+                    filesCnt += int(fileInfo["type"] == "file")
                 return utils.makeResult(True, {
                     "list": files,
                     "info": {
@@ -541,3 +535,74 @@ class dataManager:
         d = self.db.query(
             "select * from playlists where id = ?", (playlistId, ), one=True)
         return utils.makeResult(True, d)
+
+    def createShareLink(self, uid: int, path: str):
+        rpath = self.getUserDrivePath(uid)
+        if not rpath['ok']:
+            return rpath
+
+        rpath = os.path.join(rpath['data'], path)
+        if os.access(rpath, os.F_OK):
+            linkId = utils.getRandom10CharString(uid)
+            self.db.query(
+                "insert into shareLinksList (id, path, owner) values (?, ?, ?)", (linkId, path, uid))
+            return utils.makeResult(True, linkId)
+        else:
+            return utils.makeResult(False, "path not exist")
+
+    def queryShareLink(self, linkId: str):
+        data = self.db.query(
+            "select * from shareLinksList where id = ?", (linkId, ), one=True)
+
+        if data is None:
+            return utils.makeResult(False, "share link not exist")
+        else:
+            path = os.path.join(self.getUserDrivePath(
+                data['owner']), data['path'])
+            pathInfo = utils.getPathInfo(path)
+            data["info"] = pathInfo
+            return utils.makeResult(True, data)
+
+    def queryUserShareLinks(self, uid: int):
+        data = self.db.query(
+            "select * from shareLinksList where owner = ?", (uid, ))
+        return utils.makeResult(True, data)
+
+    def deleteShareLink(self, uid: int, linkId: str):
+        data = self.queryShareLink(linkId)
+        if not data['ok']:
+            return data
+        if data['data']['owner'] != uid:
+            return utils.makeResult(False, "user isn't the owner of the share link")
+        self.db.query(
+            "delete from shareLinksList where linkId = ?", (linkId, ))
+        return utils.makeResult(True, "success")
+
+    def queryShareLinkFileRealpath(self, linkId: str):
+        data = self.queryShareLink(linkId)
+        if not data['ok']:
+            return data
+
+        data = data['data']
+        data = self.queryFileRealpath(data['owner'], data['path'])
+        return data
+
+    def queryShareLinkDirInfo(self, linkId: str, path: str):
+        data = self.queryShareLink(linkId)
+        if not data['ok']:
+            return data
+
+        data = data['data']
+        data = self.getUserDriveDirInfo(
+            data['owner'], os.path.join(data['path'], path))
+        return data
+
+    def queryShareLinkDirFileRealpath(self, linkId: str, path: str):
+        data = self.queryShareLink(linkId)
+        if not data['ok']:
+            return data
+
+        data = data['data']
+        data = self.queryFileRealpath(
+            data['owner'], os.path.join(data['path'], path))
+        return data

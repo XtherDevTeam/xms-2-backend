@@ -24,6 +24,40 @@ def checkIfLoggedIn():
     return flask.session.get("loginState")
 
 
+def makeFileResponse(path, mime):
+    isPreview = not mime.startswith('application')
+    if flask.request.headers.get('Range') != None:
+        startIndex = 0
+        part_length = 2 * 1024 * 1024
+        startIndex = int(flask.request.headers.get('Range')[flask.request.headers.get(  # type:ignore
+            'Range').find('=')+1:flask.request.headers.get('Range').find('-')])  # type:ignore
+        endIndex = startIndex + part_length - 1
+        fileLength = os.path.getsize(path)
+
+        if endIndex > fileLength:
+            endIndex = fileLength - 1
+
+        response_file = bytes()
+
+        with open(path, 'rb') as file:
+            file.seek(startIndex)
+            response_file = file.read(part_length)
+
+        response = flask.make_response(response_file)
+        response.headers['Accept-Ranges'] = 'bytes'
+        response.headers['Content-Range'] = 'bytes ' + \
+            str(startIndex) + '-' + \
+            str(endIndex) + '/' + str(fileLength)
+        response.headers['Content-Type'] = mime
+        if response.headers['Content-Type'].startswith('application'):
+            response.headers['Content-Disposition'] = "attachment; filename=" + \
+                os.path.basename(path)
+
+        response.status_code = 206
+        return response
+    return flask.send_file(path, as_attachment=not isPreview, download_name=os.path.basename(path), mimetype=mime)
+
+
 def routeAfterRequest(d):
     dataManager.db.db.commit()
     return d
@@ -185,7 +219,7 @@ def routeDriveCreateDir():
         return api.utils.makeResult(False, "invalid request")
     if name is None or not isinstance(name, str):
         return api.utils.makeResult(False, "invalid request")
-    
+
     result = re.match(r'[^~\x22/\(\)\&\[\]\{\}]+', name)
     if result is None or result.group() != name:
         return api.utils.makeResult(False, "invalid folder name")
@@ -254,37 +288,7 @@ def routeDriveFile():
         result = dataManager.queryFileRealpath(uid, path)
         if result['ok']:
             result = result['data']
-            isPreview = not result['mime'].startswith('application')
-            if flask.request.headers.get('Range') != None:
-                startIndex = 0
-                part_length = 2 * 1024 * 1024
-                startIndex = int(flask.request.headers.get('Range')[flask.request.headers.get(  # type:ignore
-                    'Range').find('=')+1:flask.request.headers.get('Range').find('-')])  # type:ignore
-                endIndex = startIndex + part_length - 1
-                fileLength = os.path.getsize(result['path'])
-
-                if endIndex > fileLength:
-                    endIndex = fileLength - 1
-
-                response_file = bytes()
-
-                with open(result['path'], 'rb') as file:
-                    file.seek(startIndex)
-                    response_file = file.read(part_length)
-
-                response = flask.make_response(response_file)
-                response.headers['Accept-Ranges'] = 'bytes'
-                response.headers['Content-Range'] = 'bytes ' + \
-                    str(startIndex) + '-' + \
-                    str(endIndex) + '/' + str(fileLength)
-                response.headers['Content-Type'] = result['mime']
-                if response.headers['Content-Type'].startswith('application'):
-                    response.headers['Content-Disposition'] = "attachment; filename=" + \
-                        os.path.basename(result['path'])
-
-                response.status_code = 206
-                return response
-            return flask.send_file(result['path'], as_attachment=not isPreview, download_name=os.path.basename(result['path']), mimetype=result['mime'])
+            return makeFileResponse(result['path'], result['mime'])
         else:
             return result
     except OSError as e:
@@ -304,7 +308,8 @@ def routeDriveUpload():
     for i in flask.request.files:
         j = flask.request.files[i]
         webLogger.info(f"uploading files: {i} {j.filename}")
-        result = dataManager.queryFileUploadRealpath(uid, f"{path}/{j.filename}")
+        result = dataManager.queryFileUploadRealpath(
+            uid, f"{path}/{j.filename}")
         if result['ok']:
             j.save(result['data'])
         else:
@@ -434,7 +439,7 @@ def routeMusicPlaylistSongsInsert(id):
         return api.utils.makeResult(False, "file not exist")
 
 
-@webApplication.route("/xms/v1/music/playlist/<id>/songs/delete", methods=["GET"])
+@webApplication.route("/xms/v1/music/playlist/<id>/songs/delete", methods=["POST"])
 def routeMusicPlaylistSongsDelete(id):
     uid = checkIfLoggedIn()
     if uid is None:
@@ -450,6 +455,69 @@ def routeMusicPlaylistSongsDelete(id):
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.deleteSongFromPlaylist(id, sid)
+
+
+@webApplication.route("/xms/v1/sharelink/create", methods=["POST"])
+def routeShareLinkCreate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    path = data.get('path')
+    if not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.createShareLink(uid, path)
+
+
+@webApplication.route("/xms/v1/sharelink/<id>/info", methods=["GET"])
+def routeShareLinkInfo(id: str):
+    return dataManager.queryShareLink(id)
+
+
+@webApplication.route("/xms/v1/sharelink/<id>/delete", methods=["POST"])
+def routeShareLinkDelete(id: str):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    return dataManager.deleteShareLink(id)
+
+
+@webApplication.route("/xms/v1/sharelink/<id>/file", methods=["POST"])
+def routeShareLinkFile(id: str):
+    try:
+        result = dataManager.queryShareLinkFileRealpath(id)
+        if result['ok']:
+            return makeFileResponse(result['data']['path'], result['data']['mime'])
+        else:
+            return result
+    except OSError as e:
+        return api.utils.makeResult(False, str(e))
+
+
+@webApplication.route("/xms/v1/sharelink/<id>/dir", methods=["POST"])
+def routeShareLinkDir(id: str):
+    data = flask.request.get_json()
+    path = data.get('path')
+    if not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    return dataManager.queryShareLinkDirInfo(id, path)
+
+
+@webApplication.route("/xms/v1/sharelink/<id>/dir/file", methods=["POST"])
+def routeShareLinkDirFile(id: str):
+    data = flask.request.get_json()
+    path = data.get('path')
+    if not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    try:
+        result = dataManager.queryShareLinkDirFileRealpath(id, path)
+        if result['ok']:
+            return makeFileResponse(result['data']['path'], result['data']['mime'])
+        else:
+            return result
+    except OSError as e:
+        return api.utils.makeResult(False, str(e))
 
 
 if __name__ == "__main__":
