@@ -368,7 +368,7 @@ class dataManager:
     def updateUserPassword(self, uid: int, oldPwd: str, newPwd: str):
         d = self.queryUserPassword(uid)
         if d['ok']:
-            if d['data']['passwordMd5'] != utils.makePasswordMd5(oldPwd):
+            if d['data'] != utils.makePasswordMd5(oldPwd):
                 return utils.makeResult(False, "old password not match")
             self.db.query("update users set passwordMd5 = ? where id = ?",
                           (utils.makePasswordMd5(newPwd), uid))
@@ -549,7 +549,11 @@ class dataManager:
         if not rpath['ok']:
             return rpath
 
-        rpath = os.path.join(rpath['data'], path)
+        test = self.db.query("select id from shareLinksList where owner = ? and path = ?", (uid, path), one=True)
+        if test is not None:
+            return utils.makeResult(True, test['id'])
+
+        rpath = f"{rpath['data']}/{path}"
         if os.access(rpath, os.F_OK):
             linkId = utils.getRandom10CharString(uid)
             self.db.query(
@@ -565,8 +569,7 @@ class dataManager:
         if data is None:
             return utils.makeResult(False, "share link not exist")
         else:
-            path = os.path.join(self.getUserDrivePath(
-                data['owner']), data['path'])
+            path = f"{self.getUserDrivePath(data['owner'])}/{data['path']}"
             pathInfo = utils.getPathInfo(path)
             data["info"] = pathInfo
             return utils.makeResult(True, data)
@@ -602,7 +605,7 @@ class dataManager:
 
         data = data['data']
         data = self.getUserDriveDirInfo(
-            data['owner'], os.path.join(data['path'], path))
+            data['owner'], f"{data['path']}/{path}")
         return data
 
     def queryShareLinkDirFileRealpath(self, linkId: str, path: str):
@@ -612,5 +615,5 @@ class dataManager:
 
         data = data['data']
         data = self.queryFileRealpath(
-            data['owner'], os.path.join(data['path'], path))
+            data['owner'], f"{data['path']}/{path}")
         return data

@@ -164,6 +164,23 @@ def routeUserHeadImg(uid):
         return headImg
 
 
+@webApplication.route("/xms/v1/user/password/update", methods=["POST"])
+def routeUserPasswordUpdate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    oldPassword = data.get('oldPassword')
+    newPassword = data.get('newPassword')
+    if oldPassword is None or not isinstance(oldPassword, str) or len(oldPassword) == 0:
+        return api.utils.makeResult(False, "invalid request")
+    if newPassword is None or not isinstance(newPassword, str) or len(newPassword) == 0:
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.updateUserPassword(uid, oldPassword, newPassword)
+
+
 @webApplication.route("/xms/v1/user/username/update", methods=["POST"])
 def routeUserUsernameUpdate():
     uid = checkIfLoggedIn()
@@ -174,7 +191,7 @@ def routeUserUsernameUpdate():
     newUsername = data.get('newUsername')
     if newUsername is None or not isinstance(newUsername, str) or len(newUsername) == 0:
         return api.utils.makeResult(False, "invalid request")
-    
+
     return dataManager.updateUserUsername(uid, newUsername)
 
 
@@ -188,7 +205,7 @@ def routeUserSloganUpdate():
     newSlogan = data.get('newSlogan')
     if newSlogan is None or not isinstance(newSlogan, str) or len(newSlogan) == 0:
         return api.utils.makeResult(False, "invalid request")
-    
+
     return dataManager.updateUserSlogan(uid, newSlogan)
 
 
