@@ -531,7 +531,7 @@ def routeShareLinkDelete(id: str):
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    return dataManager.deleteShareLink(id)
+    return dataManager.deleteShareLink(uid, id)
 
 
 @webApplication.route("/xms/v1/sharelink/<id>/file", methods=["POST"])

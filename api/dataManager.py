@@ -568,8 +568,13 @@ class dataManager:
 
         if data is None:
             return utils.makeResult(False, "share link not exist")
+        
+        rpath = self.getUserDrivePath(data['owner'])
+        if not rpath['ok']:
+            return rpath
+        
         else:
-            path = f"{self.getUserDrivePath(data['owner'])}/{data['path']}"
+            path = f"{rpath['data']}/{data['path']}"
             pathInfo = utils.getPathInfo(path)
             data["info"] = pathInfo
             return utils.makeResult(True, data)
@@ -586,7 +591,7 @@ class dataManager:
         if data['data']['owner'] != uid:
             return utils.makeResult(False, "user isn't the owner of the share link")
         self.db.query(
-            "delete from shareLinksList where linkId = ?", (linkId, ))
+            "delete from shareLinksList where id = ?", (linkId, ))
         return utils.makeResult(True, "success")
 
     def queryShareLinkFileRealpath(self, linkId: str):
