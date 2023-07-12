@@ -231,7 +231,12 @@ class dataManager:
         base = self.getUserDrivePath(uid)
         if base['ok']:
             base = f"{base['data']}/{path}"
-            os.rename(base, os.path.join(os.path.dirname(base), newName))
+
+            try:
+                os.rename(base, os.path.join(os.path.dirname(base), newName))
+            except OSError as e:
+                return utils.makeResult(False, str(e))
+
             return utils.makeResult(True, "success")
         else:
             return base
@@ -241,7 +246,27 @@ class dataManager:
         if base['ok']:
             newBase = f"{base['data']}/{path}"
             newPath = f"{base['data']}/{newPath}/{os.path.basename(newBase)}"
-            os.rename(newBase, newPath)
+
+            try:
+                utils.move(newBase, newPath)
+            except utils.shutil.Error as e:
+                return utils.makeResult(False, str(e))
+
+            return utils.makeResult(True, "success")
+        else:
+            return base
+
+    def copyInUserDrive(self, uid: int, path: str, newPath: str):
+        base = self.getUserDrivePath(uid)
+        if base['ok']:
+            newBase = f"{base['data']}/{path}"
+            newPath = f"{base['data']}/{newPath}/{os.path.basename(newBase)}"
+
+            try:
+                utils.copy(newBase, newPath)
+            except utils.shutil.Error as e:
+                return utils.makeResult(False, str(e))
+
             return utils.makeResult(True, "success")
         else:
             return base
@@ -255,6 +280,7 @@ class dataManager:
                     os.remove(base)
                 else:
                     utils.rmdir(base)
+
                 return utils.makeResult(True, "success")
             except OSError as e:
                 return utils.makeResult(False, str(e))
@@ -423,6 +449,15 @@ class dataManager:
         data = self.db.query(
             "select * from playlists where owner = ?", (uid, ))
         return data
+    
+    def queryPlaylistArtwork(self, playlistId: int):
+        data = self.db.query("select id from songlist where playlistId = ? limit ?", (playlistId, 1), one=True)
+        blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
+        if data == None:
+            with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
+                return utils.makeResult(True, {"artwork": default.read(), "mime": "image/jpeg"})
+        
+        return self.querySongArtworkFromPlaylist(data['id'])
 
     def createUserPlaylist(self, uid: int, name: str, description: str):
         if self.checkUserPlaylistIfExistByPlaylistName(uid, name) is not None:
@@ -549,7 +584,8 @@ class dataManager:
         if not rpath['ok']:
             return rpath
 
-        test = self.db.query("select id from shareLinksList where owner = ? and path = ?", (uid, path), one=True)
+        test = self.db.query(
+            "select id from shareLinksList where owner = ? and path = ?", (uid, path), one=True)
         if test is not None:
             return utils.makeResult(True, test['id'])
 
@@ -568,11 +604,11 @@ class dataManager:
 
         if data is None:
             return utils.makeResult(False, "share link not exist")
-        
+
         rpath = self.getUserDrivePath(data['owner'])
         if not rpath['ok']:
             return rpath
-        
+
         else:
             path = f"{rpath['data']}/{data['path']}"
             pathInfo = utils.getPathInfo(path)

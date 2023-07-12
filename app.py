@@ -164,6 +164,15 @@ def routeUserHeadImg(uid):
         return headImg
 
 
+@webApplication.route("/xms/v1/user/playlists", methods=["GET"])
+def routeUserPlaylists():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    
+    return api.utils.makeResult(True, dataManager.queryUserOwnPlaylists(uid))
+
+
 @webApplication.route("/xms/v1/user/password/update", methods=["POST"])
 def routeUserPasswordUpdate():
     uid = checkIfLoggedIn()
@@ -289,6 +298,23 @@ def routeDriveDelete():
         return api.utils.makeResult(False, "invalid request")
 
     return dataManager.deleteInUserDrive(uid, path)
+
+
+@webApplication.route("/xms/v1/drive/copy", methods=["POST"])
+def routeDriveCopy():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    path = data.get('path')
+    newPath = data.get('newPath')
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    if newPath is None or not isinstance(newPath, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.copyInUserDrive(uid, path, newPath)
 
 
 @webApplication.route("/xms/v1/drive/rename", methods=["POST"])
@@ -434,6 +460,19 @@ def routeMusicSongInfo(id):
     return api.utils.makeResult(True, songInfo)
 
 
+@webApplication.route("/xms/v1/music/playlist/<id>/artwork")
+def routePlaylistArtwork(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    
+    data = dataManager.queryPlaylistArtwork(id)
+    if data['ok']:
+        return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
+    else:
+        return data
+
+
 @webApplication.route("/xms/v1/music/song/<id>/artwork", methods=["GET"])
 def routeMusicSongArtwork(id):
     uid = checkIfLoggedIn()
@@ -573,6 +612,6 @@ def routeShareLinkDirFile(id: str):
 
 if __name__ == "__main__":
     # print(dataManager.executeInitScript())
-    webApplication.config["SECRET_KEY"] = 'Fireworks are for now, but friends are forever!'
+    webApplication.config["SECRET_KEY"] = f'Fireworks are for now, but friends are forever!${time.time()}'
     webApplication.run(host=api.utils.catchError(webLogger, dataManager.getXmsHost(
     )), port=api.utils.catchError(webLogger, dataManager.getXmsPort()))

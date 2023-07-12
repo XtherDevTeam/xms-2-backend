@@ -5,6 +5,7 @@ import music_tag
 import random
 import time
 import mimetypes
+import shutil
 
 random.seed(int(time.time() * 100))
 
@@ -46,13 +47,15 @@ def catchError(logger: logging.Logger, result):
 
 
 def rmdir(path: str):
-    for i in os.listdir(path):
-        p = os.path.join(path, i)
-        if os.path.isfile(p):
-            os.remove(p)
-        else:
-            rmdir(p)
-    os.rmdir(path)
+    shutil.rmtree(path)
+    
+    
+def move(path: str, newPath: str):
+    shutil.move(path, newPath)
+    
+    
+def copy(path: str, newPath: str):
+    shutil.copy(path, newPath)
 
 
 def getSongInfo(songPath: str):
