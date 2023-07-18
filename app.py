@@ -492,20 +492,57 @@ def routeMusicSongArtwork(id):
         return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
     else:
         return data
-
-
-@webApplication.route("/xms/v1/music/playlist/<id>/songs/<offset>/<limit>", methods=["GET"])
-def routeMusicPlaylistSongs(id, offset, limit):
+    
+    
+@webApplication.route("/xms/v1/music/playlist/<id>/songs/<sid>/file", methods=["GET"])
+def routeMusicPlaylistSongsFile(id, sid):
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
     if d['owner'] != uid:  # type: ignore
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
-    return dataManager.queryUserPlaylistSongs(id, limit, offset)
+    data = dataManager.db.query("select id, path from songlist where id = ?", (sid, ), one=True)
+    if data is None:
+        return api.utils.makeResult(False, f'SongId({sid}) not exist')
+    
+    path = api.utils.catchError(webLogger, dataManager.queryFileRealpath(uid, data['path']))
+    return makeFileResponse(path['path'], path['mime'])
+
+
+@webApplication.route("/xms/v1/music/playlist/<id>/songs", methods=["GET"])
+def routeMusicPlaylistSongs(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:  # type: ignore
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+    return dataManager.queryUserPlaylistSongs(id)
+
+
+@webApplication.route("/xms/v1/music/playlist/<id>/songs/swap/<src>/<dest>", methods=["POST"])
+def routeMusicPlaylistSongsSwap(id, src, dest):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    
+    try:
+        d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
+        if d is None:
+            return api.utils.makeResult(False, "playlist not exist")
+        if d['owner'] != uid:  # type: ignore
+            return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+        return dataManager.swapTwoSongsInPlaylistSongList(int(src), int(dest))
+    except ValueError as e:
+        return api.utils.makeResult(False, str(e))
 
 
 @webApplication.route("/xms/v1/music/playlist/<id>/songs/insert", methods=["POST"])

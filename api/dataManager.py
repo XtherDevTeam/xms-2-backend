@@ -227,13 +227,20 @@ class dataManager:
         else:
             return base
 
+    def updateSongPathInSongList(self, oldPath: str, newPath: str):
+        self.db.query(
+            "update songlist set path = ? where path = ?", (newPath, oldPath))
+
     def renameInUserDrive(self, uid: int, path: str, newName: str):
         base = self.getUserDrivePath(uid)
         if base['ok']:
             base = f"{base['data']}/{path}"
-
+            newPath = os.path.join(os.path.dirname(base), newName)
             try:
-                os.rename(base, os.path.join(os.path.dirname(base), newName))
+                mime = mimetypes.guess_type(base)[0]
+                if mime is not None and mime.startswith('audio/'):
+                    self.updateSongPathInSongList(base, newPath)
+                os.rename(base, newPath)
             except OSError as e:
                 return utils.makeResult(False, str(e))
 
@@ -246,8 +253,8 @@ class dataManager:
         if base['ok']:
             newBase = f"{base['data']}/{path}"
             newPath = f"{base['data']}/{newPath}/{os.path.basename(newBase)}"
-
             try:
+                self.updateSongPathInSongList(newBase, newPath)
                 utils.move(newBase, newPath)
             except utils.shutil.Error as e:
                 return utils.makeResult(False, str(e))
@@ -449,14 +456,15 @@ class dataManager:
         data = self.db.query(
             "select * from playlists where owner = ?", (uid, ))
         return data
-    
+
     def queryPlaylistArtwork(self, playlistId: int):
-        data = self.db.query("select id from songlist where playlistId = ? limit ?", (playlistId, 1), one=True)
+        data = self.db.query(
+            "select id from songlist where playlistId = ? limit ?", (playlistId, 1), one=True)
         blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
         if data == None:
             with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
                 return utils.makeResult(True, {"artwork": default.read(), "mime": "image/jpeg"})
-        
+
         return self.querySongArtworkFromPlaylist(data['id'])
 
     def createUserPlaylist(self, uid: int, name: str, description: str):
@@ -478,9 +486,6 @@ class dataManager:
         if data is None:
             return utils.makeResult(False, "playlist not exist")
         else:
-            p = self.queryUserOwnPlaylists(data['owner'])  # type: ignore
-            p.remove(id)  # type: ignore
-            self.updateUserOwnPlaylists(data['owner'], p)  # type: ignore
             self.db.query("delete from playlists where id = ?", (id, ))
             return utils.makeResult(True, "success")
 
@@ -522,13 +527,13 @@ class dataManager:
         self.db.query("delete from songlist where id = ?", (songId))
         return utils.makeResult(True, "success")
 
-    def queryUserPlaylistSongs(self, playlistId: int, limit: int, offset: int):
+    def queryUserPlaylistSongs(self, playlistId: int):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
         if data is None:
             return utils.makeResult(False, "playlist not exist")
 
         songs = self.db.query(
-            "select * from songlist where playlistId = ? order by id desc limit ? offset ?", (playlistId, limit, offset))
+            "select * from songlist where playlistId = ? order by id desc", (playlistId))
 
         for i in songs:  # type: ignore
             i['info'] = utils.getSongInfo(utils.catchError(  # type: ignore
@@ -578,6 +583,21 @@ class dataManager:
         d = self.db.query(
             "select * from playlists where id = ?", (playlistId, ), one=True)
         return utils.makeResult(True, d)
+
+    def swapTwoSongsInPlaylistSongList(self, src: int, dest: int):
+        srcData = self.db.query("select path, id from songlist where id = ?", (src, ), one=True)
+        destData = self.db.query("select path, id from songlist where id = ?", (dest, ), one=True)
+        if srcData is None:
+            return utils.makeResult(False, f'SongId({src}) not exist')
+        elif destData is None:
+            return utils.makeResult(False, f'SongId({src}) not exist')
+
+        self.db.query("update songlist set path = ? where id = ?",
+                      (destData['path'], srcData['id']))
+        self.db.query("update songlist set path = ? where id = ?",
+                      (srcData['path'], destData['id']))
+
+        return utils.makeResult(True, "success")
 
     def createShareLink(self, uid: int, path: str):
         rpath = self.getUserDrivePath(uid)
