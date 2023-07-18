@@ -459,7 +459,7 @@ class dataManager:
 
     def queryPlaylistArtwork(self, playlistId: int):
         data = self.db.query(
-            "select id from songlist where playlistId = ? limit ?", (playlistId, 1), one=True)
+            "select id from songlist where playlistId = ? order by sortId desc limit ?", (playlistId, 1), one=True)
         blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
         if data == None:
             with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
@@ -502,6 +502,9 @@ class dataManager:
             return utils.makeResult(False, "playlist not exist")
 
         return self.db.query("select * from songlist where id = ?", (songId, ), one=True)
+    
+    def getPlaylistSongsCount(self, playlistId: int):
+        return self.db.query("select count(1) as count from songlist where playlistId = ?", (playlistId, ), one=True)['count']
 
     def insertSongToPlaylist(self, playlistId: int, songPath: str):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
@@ -512,7 +515,8 @@ class dataManager:
             return utils.makeResult(False, "the song has already been in the playlist")
 
         self.db.query(
-            "insert into songlist (path, playlistId) values (?, ?)", (songPath, playlistId))
+            "insert into songlist (path, playlistId, sortId) values (?, ?, ?)", (songPath, playlistId, self.getPlaylistSongsCount(playlistId)))
+        
         return utils.makeResult(
             True, self.checkIfSongExistInPlaylistByPath(playlistId, songPath)['id'])  # type: ignore
 
@@ -533,7 +537,7 @@ class dataManager:
             return utils.makeResult(False, "playlist not exist")
 
         songs = self.db.query(
-            "select * from songlist where playlistId = ? order by id desc", (playlistId))
+            "select * from songlist where playlistId = ? order by sortId desc", (playlistId))
 
         for i in songs:  # type: ignore
             i['info'] = utils.getSongInfo(utils.catchError(  # type: ignore
@@ -543,7 +547,8 @@ class dataManager:
 
     def querySongFromPlaylist(self, songId: int):
         data = self.db.query(
-            "select path, playlistId from songlist where id = ?", (songId, ), one=True)
+            "select path, playlistId, sortId from songlist where id = ?", (songId, ), one=True)
+        
         if data is None:
             return utils.makeResult(False, "song not exist")
 
@@ -575,6 +580,18 @@ class dataManager:
             with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
                 return utils.makeResult(True, {"artwork": default.read(), "mime": "image/jpeg"})
 
+    def updatePlaylistInfo(self, playlistId: int, uid: int, name: str, description: str):
+        data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
+        if data is None:
+            return utils.makeResult(False, "playlist not exist")
+        elif data['owner'] != uid:
+            return utils.makeResult(False, "user isn't the owner of the playlist")
+
+        self.db.query("update playlists set name = ?, description = ? where id = ?",
+                      (name, description, playlistId, ))
+
+        return utils.makeResult(True, "success")
+
     def queryUserPlaylistInfo(self, playlistId: int):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
         if data is None:
@@ -585,17 +602,19 @@ class dataManager:
         return utils.makeResult(True, d)
 
     def swapTwoSongsInPlaylistSongList(self, src: int, dest: int):
-        srcData = self.db.query("select path, id from songlist where id = ?", (src, ), one=True)
-        destData = self.db.query("select path, id from songlist where id = ?", (dest, ), one=True)
+        srcData = self.db.query(
+            "select sortId, id from songlist where id = ?", (src, ), one=True)
+        destData = self.db.query(
+            "select sortId, id from songlist where id = ?", (dest, ), one=True)
         if srcData is None:
             return utils.makeResult(False, f'SongId({src}) not exist')
         elif destData is None:
             return utils.makeResult(False, f'SongId({src}) not exist')
 
-        self.db.query("update songlist set path = ? where id = ?",
-                      (destData['path'], srcData['id']))
-        self.db.query("update songlist set path = ? where id = ?",
-                      (srcData['path'], destData['id']))
+        self.db.query("update songlist set sortId = ? where id = ?",
+                      (destData['sortId'], srcData['id']))
+        self.db.query("update songlist set sortId = ? where id = ?",
+                      (srcData['sortId'], destData['id']))
 
         return utils.makeResult(True, "success")
 

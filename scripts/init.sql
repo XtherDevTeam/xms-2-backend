@@ -32,7 +32,8 @@ create table playlists (
 create table songlist (
     id                  integer primary key autoincrement,
     path                string not null,
-    playlistId          integer not null
+    playlistId          integer not null,
+    sortId              integer not null
 );
 
 

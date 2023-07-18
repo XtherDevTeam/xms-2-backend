@@ -429,6 +429,23 @@ def routeMusicPlaylistDelete():
     return dataManager.deleteUserPlaylistById(id)
 
 
+@webApplication.route("/xms/v1/music/playlist/<id>/edit", methods=["POST"])
+def routeMusicPlaylistEdit(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    name = data.get('name')
+    description = data.get('description')
+    if "name" not in data or "description" not in data:
+        return api.utils.makeResult(False, "incomplete request")
+
+    if not isinstance(name, str) or not isinstance(description, str):
+        return api.utils.makeResult(False, "invalid request")
+    
+    return dataManager.updatePlaylistInfo(id, uid, name, description)
+
+
 @webApplication.route("/xms/v1/music/playlist/<id>/info", methods=["GET"])
 def routeMusicPlaylistInfo(id):
     uid = checkIfLoggedIn()
