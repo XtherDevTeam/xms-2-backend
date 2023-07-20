@@ -627,7 +627,7 @@ def routeShareLinkDelete(id: str):
     return dataManager.deleteShareLink(uid, id)
 
 
-@webApplication.route("/xms/v1/sharelink/<id>/file", methods=["POST"])
+@webApplication.route("/xms/v1/sharelink/<id>/file", methods=["GET"])
 def routeShareLinkFile(id: str):
     try:
         result = dataManager.queryShareLinkFileRealpath(id)
@@ -648,10 +648,9 @@ def routeShareLinkDir(id: str):
     return dataManager.queryShareLinkDirInfo(id, path)
 
 
-@webApplication.route("/xms/v1/sharelink/<id>/dir/file", methods=["POST"])
+@webApplication.route("/xms/v1/sharelink/<id>/dir/file", methods=["GET"])
 def routeShareLinkDirFile(id: str):
-    data = flask.request.get_json()
-    path = data.get('path')
+    path = flask.request.args.get('path')
     if not isinstance(path, str):
         return api.utils.makeResult(False, "invalid request")
     try:

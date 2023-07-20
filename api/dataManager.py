@@ -5,6 +5,7 @@ import os
 import mimetypes
 import time
 import json
+import sys
 from typing import Any
 
 
@@ -652,6 +653,7 @@ class dataManager:
             path = f"{rpath['data']}/{data['path']}"
             pathInfo = utils.getPathInfo(path)
             data["info"] = pathInfo
+            data['owner'] = utils.catchError(self.logger(), self.queryUser(data['owner']))
             return utils.makeResult(True, data)
 
     def queryUserShareLinks(self, uid: int):
@@ -675,7 +677,7 @@ class dataManager:
             return data
 
         data = data['data']
-        data = self.queryFileRealpath(data['owner'], data['path'])
+        data = self.queryFileRealpath(data['owner']['id'], data['path'])
         return data
 
     def queryShareLinkDirInfo(self, linkId: str, path: str):
@@ -684,9 +686,23 @@ class dataManager:
             return data
 
         data = data['data']
-        data = self.getUserDriveDirInfo(
-            data['owner'], f"{data['path']}/{path}")
-        return data
+        l = self.getUserDriveDirInfo(
+            data['owner']['id'], f"{data['path']}/{path}")
+        if not l['ok']:
+            return l
+
+        for i in l['data']['list']:
+            if not data['path'].startswith('/'):
+                data['path'] = f"/{data['path']}"
+            if not i['path'].startswith('/'):
+                i['path'] = f"/{i['path']}"
+                
+            data['path'] = os.path.normpath(data['path'])
+            i['path'] = os.path.normpath(i['path'])
+            
+            i['path'] = i['path'][len(os.path.commonpath([i['path'], data['path']])):]
+
+        return l
 
     def queryShareLinkDirFileRealpath(self, linkId: str, path: str):
         data = self.queryShareLink(linkId)
@@ -695,5 +711,5 @@ class dataManager:
 
         data = data['data']
         data = self.queryFileRealpath(
-            data['owner'], f"{data['path']}/{path}")
+            data['owner']['id'], f"{data['path']}/{path}")
         return data
