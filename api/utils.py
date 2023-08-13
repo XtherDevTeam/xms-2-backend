@@ -61,18 +61,18 @@ def copy(path: str, newPath: str):
 def getSongInfo(songPath: str):
     file = music_tag.load_file(songPath)
     return {
-        'title': file['title'].value,  # type: ignore
-        'album': file['album'].value,  # type: ignore
-        'artist': file['artist'].value,  # type: ignore
-        'composer': file['composer'].value,  # type: ignore
+        'title': file['title'].value,  
+        'album': file['album'].value,  
+        'artist': file['artist'].value,  
+        'composer': file['composer'].value,  
     }
 
 
 def getSongArtwork(songPath: str):
     file = music_tag.load_file(songPath)
     return {
-        'mime': file['artwork'].first.mime,  # type: ignore
-        'artwork': file['artwork'].first.data  # type: ignore
+        'mime': file['artwork'].first.mime,  
+        'artwork': file['artwork'].first.data  
     }
 
 

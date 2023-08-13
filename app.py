@@ -11,8 +11,11 @@ import api.dataManager
 import api.utils
 import api.xms
 
+import plugins.enabled
+
 database = api.dataManager.databaseObject("./root/blob/xms.db")
-dataManager = api.dataManager.dataManager(database, "./root")
+dataManager = api.dataManager.dataManager(
+    database, "./root", "./plugins", plugins.enabled)
 
 webLogger = logging.Logger("webApplication")
 webApplication = flask.Flask(__name__)
@@ -76,6 +79,35 @@ def routeInfo():
         "instanceName": api.xms.xmsInstanceName,
         "instanceDescription": api.xms.xmsInstanceDescription,
     }
+    
+    
+@webApplication.route("/xms/v1/config", methods=["GET"])
+def routeConfig():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    if dataManager.queryUser(uid)['data']['level'] < 1:
+        return api.utils.makeResult(False, "user is not admin")
+    return dataManager.getXmsConfig()
+
+
+@webApplication.route("/xms/v1/config/update", methods=["POST"])
+def routeConfigUpdate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    if dataManager.queryUser(uid)['data']['level'] < 1:
+        return api.utils.makeResult(False, "user is not admin")
+    data = flask.request.get_json(silent=True)
+    if data is None:
+        return api.utils.makeResult(False, "invalid request")
+    
+    return dataManager.updateXmsConfig(data)
+
+
+@webApplication.route("/xms/v1/info/plugins", methods=["GET"])
+def routeInfoPlugins():
+    return dataManager.queryAvaliablePlugins()
 
 
 @webApplication.route("/xms/v1/signin", methods=["POST"])
@@ -116,7 +148,7 @@ def routeSignUp():
         return api.utils.makeResult(False, "incomplete request")
     else:
         if isinstance(username, str) and isinstance(password, str) and isinstance(slogan, str):
-            return dataManager.createUser(username, password, slogan, 2)
+            return dataManager.createUser(username, password, slogan, 0)
         else:
             return api.utils.makeResult(False, "invalid request")
 
@@ -140,6 +172,14 @@ def routeUserInfo(uid):
 def routeUserShareLinks(uid):
     uid = int(uid)
     return dataManager.queryUserShareLinks(uid)
+
+
+@webApplication.route("/xms/v1/user/tasks", methods=["GET"])
+def routeUserTasks():
+    uid = checkIfLoggedIn()
+    if uid == None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    return dataManager.queryUserOwnTaskList(uid)
 
 
 @webApplication.route("/xms/v1/user/<uid>/avatar", methods=["GET"])
@@ -169,7 +209,7 @@ def routeUserPlaylists():
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    
+
     return api.utils.makeResult(True, dataManager.queryUserOwnPlaylists(uid))
 
 
@@ -228,7 +268,7 @@ def routeUserAvatarUpdate():
     if avatar is None:
         return api.utils.makeResult(False, "invalid request")
 
-    if not avatar.content_type.startswith("image/"):  # type: ignore
+    if not avatar.content_type.startswith("image/"):  
         return api.utils.makeResult(False, "not an image file")
 
     image = avatar.stream.read()
@@ -246,7 +286,7 @@ def routeUserHeadImgUpdate():
     if headimg is None:
         return api.utils.makeResult(False, "invalid request")
 
-    if not headimg.content_type.startswith("image/"):  # type: ignore
+    if not headimg.content_type.startswith("image/"):  
         return api.utils.makeResult(False, "not an image file")
 
     image = headimg.stream.read()
@@ -424,7 +464,7 @@ def routeMusicPlaylistDelete():
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  # type: ignore
+    if d['owner'] != uid:  
         return api.utils.makeResult(False, "user isn't the owner of playlist")
     return dataManager.deleteUserPlaylistById(id)
 
@@ -442,7 +482,7 @@ def routeMusicPlaylistEdit(id):
 
     if not isinstance(name, str) or not isinstance(description, str):
         return api.utils.makeResult(False, "invalid request")
-    
+
     return dataManager.updatePlaylistInfo(id, uid, name, description)
 
 
@@ -454,7 +494,7 @@ def routeMusicPlaylistInfo(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  # type: ignore
+    if d['owner'] != uid:  
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.queryUserPlaylistInfo(id)
@@ -482,7 +522,7 @@ def routePlaylistArtwork(id):
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    
+
     data = dataManager.queryPlaylistArtwork(id)
     if data['ok']:
         return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
@@ -509,8 +549,8 @@ def routeMusicSongArtwork(id):
         return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
     else:
         return data
-    
-    
+
+
 @webApplication.route("/xms/v1/music/playlist/<id>/songs/<sid>/file", methods=["GET"])
 def routeMusicPlaylistSongsFile(id, sid):
     uid = checkIfLoggedIn()
@@ -519,14 +559,16 @@ def routeMusicPlaylistSongsFile(id, sid):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  # type: ignore
+    if d['owner'] != uid:  
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
-    data = dataManager.db.query("select id, path from songlist where id = ?", (sid, ), one=True)
+    data = dataManager.db.query(
+        "select id, path from songlist where id = ?", (sid, ), one=True)
     if data is None:
         return api.utils.makeResult(False, f'SongId({sid}) not exist')
-    
-    path = api.utils.catchError(webLogger, dataManager.queryFileRealpath(uid, data['path']))
+
+    path = api.utils.catchError(
+        webLogger, dataManager.queryFileRealpath(uid, data['path']))
     return makeFileResponse(path['path'], path['mime'])
 
 
@@ -538,7 +580,7 @@ def routeMusicPlaylistSongs(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  # type: ignore
+    if d['owner'] != uid:  
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.queryUserPlaylistSongs(id)
@@ -549,12 +591,12 @@ def routeMusicPlaylistSongsSwap(id, src, dest):
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
-    
+
     try:
         d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
         if d is None:
             return api.utils.makeResult(False, "playlist not exist")
-        if d['owner'] != uid:  # type: ignore
+        if d['owner'] != uid:  
             return api.utils.makeResult(False, "user isn't the owner of playlist")
 
         return dataManager.swapTwoSongsInPlaylistSongList(int(src), int(dest))
@@ -574,7 +616,7 @@ def routeMusicPlaylistSongsInsert(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  # type: ignore
+    if d['owner'] != uid:  
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     if dataManager.queryFileRealpath(uid, path)['ok']:
@@ -595,7 +637,7 @@ def routeMusicPlaylistSongsDelete(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  # type: ignore
+    if d['owner'] != uid:  
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.deleteSongFromPlaylist(id, sid)
@@ -663,8 +705,69 @@ def routeShareLinkDirFile(id: str):
         return api.utils.makeResult(False, str(e))
 
 
+@webApplication.route("/xms/v1/task/create", methods=["POST"])
+def routeTaskCreate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    data = flask.request.get_json()
+    print(data)
+    
+    name = data.get('name')
+    if name is None or not isinstance(name, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    plugin = data.get('plugin')
+    if name is None or not isinstance(plugin, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    handler = data.get('handler')
+    if name is None or not isinstance(handler, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    args = data.get('args')
+    if name is None or not isinstance(args, list):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.createTask(uid, name, plugin, handler, args)
+
+
+@webApplication.route("/xms/v1/task/<id>/info", methods=["GET"])
+def routeTaskInfo(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    try:
+        id = int(id)
+    except:
+        return api.utils.makeResult(False, "invalid request")
+
+    data = dataManager.queryTask(id)
+    if data['ok'] and data['data']['owner'] != uid:
+        return api.utils.makeResult(False, "user isn't the owner of this task")
+    else:
+        return data
+
+
+@webApplication.route("/xms/v1/task/<id>/delete", methods=["POST"])
+def routeTaskDelete(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    try:
+        id = int(id)
+    except:
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.deleteTask(uid, id)
+
+
 if __name__ == "__main__":
     # print(dataManager.executeInitScript())
-    webApplication.config["SECRET_KEY"] = f'Fireworks are for now, but friends are forever!${time.time()}'
+    webApplication.config[
+        "SECRET_KEY"] = f'Fireworks are for now, but friends are forever!'
     webApplication.run(host=api.utils.catchError(webLogger, dataManager.getXmsHost(
     )), port=api.utils.catchError(webLogger, dataManager.getXmsPort()))

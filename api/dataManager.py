@@ -6,7 +6,12 @@ import mimetypes
 import time
 import json
 import sys
+import multiprocessing
 from typing import Any
+
+
+def getCurrentTime():
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time()))
 
 
 class databaseObject:
@@ -17,9 +22,12 @@ class databaseObject:
         cur = self.db.execute(query, args)
         rv = [dict((cur.description[idx][0], value)
                    for idx, value in enumerate(row)) for row in cur.fetchall()]
-        self.db.commit()
-
-        return (rv[0] if rv else None) if one else rv
+        lastrowid = cur.lastrowid
+        cur.close()
+        if query.startswith('insert'):
+            return lastrowid
+        else:
+            return (rv[0] if rv else None) if one else rv
 
     def runScript(self, query: str):
         self.db.executescript(query)
@@ -31,9 +39,27 @@ class databaseObject:
 
 
 class dataManager:
-    def __init__(self, dbObject: databaseObject, appRoot: str) -> None:
+    class taskInfo:
+        def __init__(self, dbObject: databaseObject, taskId: int):
+            self.db = dbObject
+            self.id = taskId
+
+        def setLogText(self, text: str):
+            self.db.query(
+                "update taskList set logText = ? where id = ?", (text, self.id))
+
+        def ended(self):
+            self.db.query(
+                "update taskList set endTime = ? where id = ?", (getCurrentTime(), self.id))
+
+    def __init__(self, dbObject: databaseObject, appRoot: str, pluginsPath: str, enabledModule) -> None:
         self.db = dbObject
         self._logger = logging.getLogger("dataManager")
+        self.plugins = {}
+        for i in enabledModule.enabled:
+            data = i.registry()
+            self.plugins[data['name']] = {'info': data, 'handlers': i.handlers}
+        self.runningTasks = {}
 
     def logger(self) -> logging.Logger:
         return self._logger
@@ -45,7 +71,7 @@ class dataManager:
                 return utils.makeResult(False, "uninitialized")
             else:
 
-                return utils.makeResult(True, d['xmsBlobPath'].replace(  # type: ignore
+                return utils.makeResult(True, d['xmsBlobPath'].replace(  
                     '$', utils.catchError(self.logger(), self.getXmsRootPath())))
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
@@ -56,7 +82,7 @@ class dataManager:
             if d is None:
                 return utils.makeResult(False, "uninitialized")
             else:
-                return utils.makeResult(True, d['xmsRootPath'])  # type: ignore
+                return utils.makeResult(True, d['xmsRootPath'])  
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
 
@@ -66,7 +92,7 @@ class dataManager:
             if d is None:
                 return utils.makeResult(False, "uninitialized")
             else:
-                return utils.makeResult(True, d['xmsDrivePath'].replace(  # type: ignore
+                return utils.makeResult(True, d['xmsDrivePath'].replace(  
                     '$', utils.catchError(self.logger(), self.getXmsRootPath())))
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
@@ -77,7 +103,7 @@ class dataManager:
             if d is None:
                 return utils.makeResult(False, "uninitialized")
             else:
-                return utils.makeResult(True, d['host'])  # type: ignore
+                return utils.makeResult(True, d['host'])  
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
 
@@ -87,7 +113,7 @@ class dataManager:
             if d is None:
                 return utils.makeResult(False, "uninitialized")
             else:
-                return utils.makeResult(True, d['port'])  # type: ignore
+                return utils.makeResult(True, d['port'])  
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
 
@@ -140,18 +166,26 @@ class dataManager:
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
 
+    def getXmsConfig(self):
+        return utils.makeResult(True, self.db.query("select * from config", one=True))
+
+    def updateXmsConfig(self, config):
+        try:
+            self.db.query("update config set serverId = ?, xmsRootPath = ?, xmsBlobPath = ?, xmsDrivePath = ?, host = ?, port = ?, proxyType = ?, proxyUrl = ?, allowRegister = ?, enableInviteCode = ?, inviteCode = ?",
+                          (config['serverId'], config['xmsRootPath'], config['xmsBlobPath'], config['xmsDrivePath'], config['host'], config['port'], config['proxyType'], config['proxyUrl'], config['allowRegister'], config['enableInviteCode'], config['inviteCode']))
+            return utils.makeResult(True, "success")
+        except KeyError as e:
+            return utils.makeResult(False, f"invalid request: missing {e}")
+
     # use username instead of uid because system don't know uid when creating user
-    def createUserDrive(self, username: str):
+    # update: done some tricks to query function, now it will return lastRowId a.k.a uid
+    def createUserDrive(self, uid: str):
         drivePath = utils.catchError(self.logger(), self.getXmsDrivePath())
-        uid = self.checkIfUserExistByUserName(username)
-        if uid is None:
-            return utils.makeResult(False, "user not exist while creating user drive")
-        else:
-            try:
-                os.makedirs(f"{drivePath}/{uid}")
-                return utils.makeResult(True, "success")
-            except OSError as e:
-                return utils.makeResult(False, f"unable to create user drive: {str(e)}")
+        try:
+            os.makedirs(f"{drivePath}/{uid}", exist_ok=True)
+            return utils.makeResult(True, "success")
+        except Exception as e:
+            return utils.makeResult(False, str(e))
 
     def deleteUserDrive(self, uid: int):
         drivePath = utils.catchError(self.logger(), self.getXmsDrivePath())
@@ -172,12 +206,12 @@ class dataManager:
             return utils.makeResult(False, "user with the same username already exists")
 
         try:
-            # 0 is superadmin, 1 is admin, 2 is user
+            # 0 is user, 1 is admin, 2 is superadmin
             with open(utils.catchError(self.logger(), self.getXmsBlobPath()) + "/avatar.jpg", "rb+") as a:
                 with open(utils.catchError(self.logger(), self.getXmsBlobPath()) + "/headImage.jpg", "rb+") as b:
-                    self.db.query("insert into users (name, slogan, level, passwordMd5, avatar, headImage) values (?,?,?,?,?,?)",
+                    uid = self.db.query("insert into users (name, slogan, level, passwordMd5, avatar, headImage) values (?,?,?,?,?,?)",
                                   (userName, userSlogan, level, utils.makePasswordMd5(userPassword), a.read(), b.read()))
-            return self.createUserDrive(userName)
+                    return self.createUserDrive(uid)
         except Exception as e:
             return utils.makeResult(False, str(e))
 
@@ -336,7 +370,7 @@ class dataManager:
             d = self.db.query(
                 "select id from users where id = ?", (uid, ), one=True)
             if d is not None:
-                return d['id']  # type: ignore
+                return d['id']  
         except sqlite3.Error as e:
             return None
 
@@ -345,7 +379,7 @@ class dataManager:
             d = self.db.query(
                 "select id from users where name = ?", (username, ), one=True)
             if d is not None:
-                return d['id']  # type: ignore
+                return d['id']  
         except sqlite3.Error as e:
             return None
 
@@ -395,7 +429,7 @@ class dataManager:
             if d is None:
                 return utils.makeResult(False, "user not exist")
             else:
-                return utils.makeResult(True, d['passwordMd5'])  # type: ignore
+                return utils.makeResult(True, d['passwordMd5'])  
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
 
@@ -411,7 +445,7 @@ class dataManager:
             return utils.makeResult(False, "user not exist")
 
     def updateUserAvatar(self, uid: int, avatar: bytes, mime: str):
-        uid = self.checkIfUserExistById(uid)  # type: ignore
+        uid = self.checkIfUserExistById(uid)  
         if uid is not None:
             try:
                 self.db.query(
@@ -421,7 +455,7 @@ class dataManager:
                 return utils.makeResult(False, str(e))
 
     def updateUserHeadImage(self, uid: int, headImage: bytes, mime: str):
-        uid = self.checkIfUserExistById(uid)  # type: ignore
+        uid = self.checkIfUserExistById(uid)  
         if uid is not None:
             try:
                 self.db.query(
@@ -444,7 +478,7 @@ class dataManager:
         d = self.db.query(
             "select id from playlists where name = ? and owner = ?", (name, uid), one=True)
         if d is not None:
-            return d['id']  # type: ignore
+            return d['id']  
         else:
             return d
 
@@ -457,6 +491,11 @@ class dataManager:
         data = self.db.query(
             "select * from playlists where owner = ?", (uid, ))
         return data
+
+    def queryUserOwnTaskList(self, uid: int):
+        data = self.db.query(
+            "select id, name, plugin, handler, creationTime, endTime from taskList where owner = ? order by id desc", (uid, ))
+        return utils.makeResult(True, data)
 
     def queryPlaylistArtwork(self, playlistId: int):
         data = self.db.query(
@@ -473,11 +512,11 @@ class dataManager:
             return utils.makeResult(False, "playlist with the same playlist name already exists")
         if self.checkIfUserExistById(uid) is not None:
             self.db.query("insert into playlists (name, owner, description, creationDate) values (?, ?, ?, ?)",
-                          (name, uid, description, time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time()))))
+                          (name, uid, description, getCurrentTime()))
 
             playlistId = self.checkUserPlaylistIfExistByPlaylistName(uid, name)
             data = self.queryUserOwnPlaylists(uid)
-            data.append(playlistId)  # type: ignore
+            data.append(playlistId)  
             return utils.makeResult(True, playlistId)
         else:
             return utils.makeResult(False, "user not exist")
@@ -503,7 +542,7 @@ class dataManager:
             return utils.makeResult(False, "playlist not exist")
 
         return self.db.query("select * from songlist where id = ?", (songId, ), one=True)
-    
+
     def getPlaylistSongsCount(self, playlistId: int):
         return self.db.query("select count(1) as count from songlist where playlistId = ?", (playlistId, ), one=True)['count']
 
@@ -517,9 +556,9 @@ class dataManager:
 
         self.db.query(
             "insert into songlist (path, playlistId, sortId) values (?, ?, ?)", (songPath, playlistId, self.getPlaylistSongsCount(playlistId)))
-        
+
         return utils.makeResult(
-            True, self.checkIfSongExistInPlaylistByPath(playlistId, songPath)['id'])  # type: ignore
+            True, self.checkIfSongExistInPlaylistByPath(playlistId, songPath)['id'])  
 
     def deleteSongFromPlaylist(self, playlistId: int, songId: int):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
@@ -540,24 +579,24 @@ class dataManager:
         songs = self.db.query(
             "select * from songlist where playlistId = ? order by sortId desc", (playlistId))
 
-        for i in songs:  # type: ignore
-            i['info'] = utils.getSongInfo(utils.catchError(  # type: ignore
-                self.logger(), self.queryFileRealpath(data['owner'], i['path']))['path'])  # type: ignore
+        for i in songs:  
+            i['info'] = utils.getSongInfo(utils.catchError(  
+                self.logger(), self.queryFileRealpath(data['owner'], i['path']))['path'])  
 
         return utils.makeResult(True, songs)
 
     def querySongFromPlaylist(self, songId: int):
         data = self.db.query(
             "select path, playlistId, sortId from songlist where id = ?", (songId, ), one=True)
-        
+
         if data is None:
             return utils.makeResult(False, "song not exist")
 
         playlist = self.queryUserPlaylistInfo(
-            data['playlistId'])['data']  # type: ignore
+            data['playlistId'])['data']  
 
-        songInfo = utils.getSongInfo(utils.catchError(  # type: ignore
-            self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path'])  # type: ignore
+        songInfo = utils.getSongInfo(utils.catchError(  
+            self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path'])  
         songInfo['owner'] = playlist['owner']
 
         return utils.makeResult(True, songInfo)
@@ -569,11 +608,11 @@ class dataManager:
             return utils.makeResult(False, "song not exist")
 
         playlist = self.queryUserPlaylistInfo(
-            data['playlistId'])['data']  # type: ignore
+            data['playlistId'])['data']  
 
         try:
-            return utils.makeResult(True, utils.getSongArtwork(utils.catchError(  # type: ignore
-                self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path']))  # type: ignore
+            return utils.makeResult(True, utils.getSongArtwork(utils.catchError(  
+                self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path']))  
         except Exception as e:
             print(e)
             blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
@@ -653,7 +692,8 @@ class dataManager:
             path = f"{rpath['data']}/{data['path']}"
             pathInfo = utils.getPathInfo(path)
             data["info"] = pathInfo
-            data['owner'] = utils.catchError(self.logger(), self.queryUser(data['owner']))
+            data['owner'] = utils.catchError(
+                self.logger(), self.queryUser(data['owner']))
             return utils.makeResult(True, data)
 
     def queryUserShareLinks(self, uid: int):
@@ -696,11 +736,12 @@ class dataManager:
                 data['path'] = f"/{data['path']}"
             if not i['path'].startswith('/'):
                 i['path'] = f"/{i['path']}"
-                
+
             data['path'] = os.path.normpath(data['path'])
             i['path'] = os.path.normpath(i['path'])
-            
-            i['path'] = i['path'][len(os.path.commonpath([i['path'], data['path']])):]
+
+            i['path'] = i['path'][len(
+                os.path.commonpath([i['path'], data['path']])):]
 
         return l
 
@@ -713,3 +754,59 @@ class dataManager:
         data = self.queryFileRealpath(
             data['owner']['id'], f"{data['path']}/{path}")
         return data
+
+    def queryAvaliablePlugins(self):
+        plugins = []
+        for i in self.plugins:
+            plugins.append({'name': i, 'info': self.plugins[i]['info']})
+        return utils.makeResult(True, plugins)
+
+    def queryTask(self, taskId: int):
+        data = self.db.query(
+            "select * from taskList where id = ?", (taskId, ), one=True)
+        if data is None:
+            return utils.makeResult(False, "task not exist")
+        else:
+            return utils.makeResult(True, data)
+
+    def createTask(self, uid: int, name: str, plugin: str, handler: str, args: list):
+        if plugin not in self.plugins:
+            return utils.makeResult(False, "plugin not exist")
+
+        user = self.queryUser(uid)
+        if not user['ok']:
+            return user
+
+        if user['data']['level'] < self.plugins[plugin]['info']['avaliablePremissionLevel']:
+            return utils.makeResult(False, "user's premission level is lower than requirement")
+
+        taskId = self.db.query(
+            'insert into taskList (owner, name, plugin, handler, args, creationTime) values (?, ?, ?, ?, ?, ?)',
+            (uid, name, plugin, handler, json.dumps(args), getCurrentTime()))
+        try:
+            handlerCallable = self.plugins[plugin]['handlers'].__getattribute__(
+                handler)
+            self.runningTasks[taskId] = \
+                multiprocessing.Process(
+                target=handlerCallable, args=(self, self.taskInfo(self.db, taskId), args))
+            self.runningTasks[taskId].run()
+            return utils.makeResult(True, "success")
+        except AttributeError:
+            return utils.makeResult(False, "specified handler not exist")
+        except TypeError:
+            return utils.makeResult(False, "invalid task arguments")
+
+    def deleteTask(self, uid: int, taskId: int):
+        task = self.queryTask(taskId)
+        if not task['ok']:
+            return task
+
+        if task['data']['owner'] != uid:
+            return utils.makeResult("user isn't the owner of this task")
+
+        self.db.query("delete from taskList where id = ?", (taskId, ))
+
+        if taskId in self.runningTasks:
+            self.runningTasks[taskId].terminate()
+
+        return utils.makeResult(True, "success")

@@ -4,6 +4,8 @@ drop table if exists playlists;
 drop table if exists songlist;
 drop table if exists shareLinksList;
 drop table if exists articles;
+drop table if exists taskList;
+drop table if exists settings;
 
 create table users (
     id                  integer primary key autoincrement,
@@ -61,7 +63,24 @@ create table config (
     xmsBlobPath         string default '$/blob',
     xmsDrivePath        string default '$/drive',
     host                string default '0.0.0.0',
-    port                integer default 11453
+    port                integer default 11453,
+    proxyType           string default 'None',
+    proxyUrl            string default '',
+    allowRegister       integer default 0,
+    enableInviteCode    integer default 0,
+    inviteCode          string default ''
+);
+
+create table taskList (
+    id                  integer primary key autoincrement,
+    name                string not null,
+    plugin              string not null,
+    handler             string not null,
+    args                string default '[]',
+    logText             string default '',
+    creationTime        string not null,
+    endTime             string default '0000-00-00 00:00:00',
+    owner               integer not null
 );
 
 insert into config (serverId) values ("YoimiyaGaTaisukidesu");
