@@ -71,6 +71,7 @@ webApplication.after_request(routeAfterRequest)
 
 @webApplication.route("/xms/v1/info", methods=["GET"])
 def routeInfo():
+    cfg = dataManager.getXmsConfig()['data']
     return {
         "coreCodeName": api.xms.xmsCoreCodeName,
         "coreBuildNumber": api.xms.xmsCoreBuildNumber,
@@ -78,9 +79,11 @@ def routeInfo():
         "serverTime": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time())),
         "instanceName": api.xms.xmsInstanceName,
         "instanceDescription": api.xms.xmsInstanceDescription,
+        "allowRegister": cfg['allowRegister'],
+        "enableInviteCode": cfg['enableInviteCode']
     }
-    
-    
+
+
 @webApplication.route("/xms/v1/config", methods=["GET"])
 def routeConfig():
     uid = checkIfLoggedIn()
@@ -101,7 +104,7 @@ def routeConfigUpdate():
     data = flask.request.get_json(silent=True)
     if data is None:
         return api.utils.makeResult(False, "invalid request")
-    
+
     return dataManager.updateXmsConfig(data)
 
 
@@ -141,12 +144,19 @@ def routeSignOut():
 @webApplication.route("/xms/v1/signup", methods=["POST"])
 def routeSignUp():
     data = flask.request.get_json()
+    cfg = dataManager.getXmsConfig()['data']
     username = data.get("username")
     password = data.get("password")
     slogan = data.get("slogan")
+    inviteCode = data.get("inviteCode")
+    if cfg['allowRegister'] == 0:
+        return api.utils.makeResult(False, "registration is disabled")
+
     if username is None or password is None or slogan is None:
         return api.utils.makeResult(False, "incomplete request")
     else:
+        if cfg['enableInviteCode'] == 1 and inviteCode != cfg['inviteCode']:
+            return api.utils.makeResult(False, "invalid inviteCode")
         if isinstance(username, str) and isinstance(password, str) and isinstance(slogan, str):
             return dataManager.createUser(username, password, slogan, 0)
         else:
@@ -268,7 +278,7 @@ def routeUserAvatarUpdate():
     if avatar is None:
         return api.utils.makeResult(False, "invalid request")
 
-    if not avatar.content_type.startswith("image/"):  
+    if not avatar.content_type.startswith("image/"):
         return api.utils.makeResult(False, "not an image file")
 
     image = avatar.stream.read()
@@ -286,7 +296,7 @@ def routeUserHeadImgUpdate():
     if headimg is None:
         return api.utils.makeResult(False, "invalid request")
 
-    if not headimg.content_type.startswith("image/"):  
+    if not headimg.content_type.startswith("image/"):
         return api.utils.makeResult(False, "not an image file")
 
     image = headimg.stream.read()
@@ -464,7 +474,7 @@ def routeMusicPlaylistDelete():
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  
+    if d['owner'] != uid:
         return api.utils.makeResult(False, "user isn't the owner of playlist")
     return dataManager.deleteUserPlaylistById(id)
 
@@ -494,7 +504,7 @@ def routeMusicPlaylistInfo(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  
+    if d['owner'] != uid:
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.queryUserPlaylistInfo(id)
@@ -512,7 +522,7 @@ def routeMusicSongInfo(id):
 
     songInfo = songInfo['data']
     if songInfo['owner'] != uid:
-        return api.utils.makeResult(False, "premission denied")
+        return api.utils.makeResult(False, "permission denied")
 
     return api.utils.makeResult(True, songInfo)
 
@@ -542,7 +552,7 @@ def routeMusicSongArtwork(id):
 
     songInfo = songInfo['data']
     if songInfo['owner'] != uid:
-        return api.utils.makeResult(False, "premission denied")
+        return api.utils.makeResult(False, "permission denied")
 
     data = dataManager.querySongArtworkFromPlaylist(id)
     if data['ok']:
@@ -559,7 +569,7 @@ def routeMusicPlaylistSongsFile(id, sid):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  
+    if d['owner'] != uid:
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     data = dataManager.db.query(
@@ -580,7 +590,7 @@ def routeMusicPlaylistSongs(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  
+    if d['owner'] != uid:
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.queryUserPlaylistSongs(id)
@@ -596,7 +606,7 @@ def routeMusicPlaylistSongsSwap(id, src, dest):
         d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
         if d is None:
             return api.utils.makeResult(False, "playlist not exist")
-        if d['owner'] != uid:  
+        if d['owner'] != uid:
             return api.utils.makeResult(False, "user isn't the owner of playlist")
 
         return dataManager.swapTwoSongsInPlaylistSongList(int(src), int(dest))
@@ -616,7 +626,7 @@ def routeMusicPlaylistSongsInsert(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  
+    if d['owner'] != uid:
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     if dataManager.queryFileRealpath(uid, path)['ok']:
@@ -637,7 +647,7 @@ def routeMusicPlaylistSongsDelete(id):
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(id)
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
-    if d['owner'] != uid:  
+    if d['owner'] != uid:
         return api.utils.makeResult(False, "user isn't the owner of playlist")
 
     return dataManager.deleteSongFromPlaylist(id, sid)
@@ -713,7 +723,7 @@ def routeTaskCreate():
 
     data = flask.request.get_json()
     print(data)
-    
+
     name = data.get('name')
     if name is None or not isinstance(name, str):
         return api.utils.makeResult(False, "invalid request")
@@ -763,6 +773,74 @@ def routeTaskDelete(id):
         return api.utils.makeResult(False, "invalid request")
 
     return dataManager.deleteTask(uid, id)
+
+
+@webApplication.route("/xms/v1/user/manage/list", methods=["GET"])
+def userManageList():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    if dataManager.queryUser(uid)['data']['level'] == 2:
+        return dataManager.getUserList()
+    else:
+        return api.utils.makeResult(False, "permission denied")
+
+
+@webApplication.route("/xms/v1/user/manage/delete", methods=["POST"])
+def userManageDelete():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    if dataManager.queryUser(uid)['data']['level'] == 2:
+        data = flask.request.get_json(silent=True)
+        if data.get('id') is None or not isinstance(data['id'], int):
+            return api.utils.makeResult(False, "invalid request")
+
+        return dataManager.deleteUser(data['id'])
+    else:
+        return api.utils.makeResult(False, "permission denied")
+
+
+@webApplication.route("/xms/v1/user/manage/updateLevel", methods=["POST"])
+def userManageUpdateLevel():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    if dataManager.queryUser(uid)['data']['level'] == 2:
+        data = flask.request.get_json(silent=True)
+        if data.get('id') is None or not isinstance(data['id'], int):
+            return api.utils.makeResult(False, "invalid request")
+        if data.get('level') is None or not isinstance(data['level'], int):
+            return api.utils.makeResult(False, "invalid request")
+
+        return dataManager.updateUserPermissionLevel(data['id'], data['level'])
+    else:
+        return api.utils.makeResult(False, "permission denied")
+
+
+@webApplication.route("/xms/v1/user/manage/create", methods=["POST"])
+def userManageCreate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    if dataManager.queryUser(uid)['data']['level'] == 2:
+        data = flask.request.get_json(silent=True)
+        if data.get('name') is None or not isinstance(data['name'], str):
+            return api.utils.makeResult(False, "invalid request")
+        if data.get('password') is None or not isinstance(data['password'], str):
+            return api.utils.makeResult(False, "invalid request")
+        if data.get('slogan') is None or not isinstance(data['slogan'], str):
+            return api.utils.makeResult(False, "invalid request")
+        if data.get('level') is None or not isinstance(data['level'], int):
+            return api.utils.makeResult(False, "invalid request")
+
+        return dataManager.createUser(data['name'], data['password'], data['slogan'], data['level'])
+    else:
+        return api.utils.makeResult(False, "permission denied")
 
 
 if __name__ == "__main__":

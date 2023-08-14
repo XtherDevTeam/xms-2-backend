@@ -4,5 +4,5 @@ def registry():
     return {
         'name': 'test',
         'description': 'test plugin and do nothing',
-        'avaliablePremissionLevel': 0
+        'avaliablepermissionLevel': 0
     }

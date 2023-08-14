@@ -4,5 +4,5 @@ def registry():
     return {
         'name': 'rce',
         'description': 'run shell script remotely',
-        'avaliablePremissionLevel': 1
+        'avaliablepermissionLevel': 1
     }    
