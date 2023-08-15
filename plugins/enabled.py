@@ -10,8 +10,10 @@ the imported object of each plugin below.
 
 import plugins.codeExec
 import plugins.test
+import plugins.spotdlBackend
 
 enabled = [
     plugins.codeExec,
-    plugins.test
+    plugins.test,
+    plugins.spotdlBackend
 ]

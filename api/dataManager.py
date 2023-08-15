@@ -6,7 +6,7 @@ import mimetypes
 import time
 import json
 import sys
-import multiprocessing
+import threading
 from typing import Any
 
 
@@ -364,7 +364,7 @@ class dataManager:
                 return utils.makeResult(False, "user not found")
         except sqlite3.Error as e:
             return utils.makeResult(False, str(e))
-        
+
     def deleteUser(self, uid: int):
         if self.checkIfUserExistById(uid) is None:
             return utils.makeResult(False, "user not exist")
@@ -770,12 +770,22 @@ class dataManager:
         return utils.makeResult(True, plugins)
 
     def queryTask(self, taskId: int):
+        self.removeEndedTask()
         data = self.db.query(
             "select * from taskList where id = ?", (taskId, ), one=True)
         if data is None:
             return utils.makeResult(False, "task not exist")
         else:
             return utils.makeResult(True, data)
+
+    def removeEndedTask(self):
+        tasksToRemove = []
+        for i in self.runningTasks:
+            if not self.runningTasks[i].is_alive():
+                tasksToRemove.append(i)
+
+        for i in tasksToRemove:
+            del self.runningTasks[i]
 
     def createTask(self, uid: int, name: str, plugin: str, handler: str, args: list):
         if plugin not in self.plugins:
@@ -795,9 +805,10 @@ class dataManager:
             handlerCallable = self.plugins[plugin]['handlers'].__getattribute__(
                 handler)
             self.runningTasks[taskId] = \
-                multiprocessing.Process(
+                threading.Thread(
                 target=handlerCallable, args=(self, self.taskInfo(self.db, taskId), args))
-            self.runningTasks[taskId].run()
+            self.runningTasks[taskId].start()
+            
             return utils.makeResult(True, "success")
         except AttributeError:
             return utils.makeResult(False, "specified handler not exist")
@@ -815,7 +826,9 @@ class dataManager:
         self.db.query("delete from taskList where id = ?", (taskId, ))
 
         if taskId in self.runningTasks:
-            self.runningTasks[taskId].terminate()
+            if self.runningTasks[taskId].is_alive():
+                self.runningTasks[taskId].terminate()
+                del self.runningTasks[taskId]
 
         return utils.makeResult(True, "success")
 
