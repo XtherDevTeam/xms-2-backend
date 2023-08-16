@@ -59,7 +59,6 @@ class dataManager:
         for i in enabledModule.enabled:
             data = i.registry()
             self.plugins[data['name']] = {'info': data, 'handlers': i.handlers}
-        self.runningTasks = {}
 
     def logger(self) -> logging.Logger:
         return self._logger
@@ -770,22 +769,12 @@ class dataManager:
         return utils.makeResult(True, plugins)
 
     def queryTask(self, taskId: int):
-        self.removeEndedTask()
         data = self.db.query(
             "select * from taskList where id = ?", (taskId, ), one=True)
         if data is None:
             return utils.makeResult(False, "task not exist")
         else:
             return utils.makeResult(True, data)
-
-    def removeEndedTask(self):
-        tasksToRemove = []
-        for i in self.runningTasks:
-            if not self.runningTasks[i].is_alive():
-                tasksToRemove.append(i)
-
-        for i in tasksToRemove:
-            del self.runningTasks[i]
 
     def createTask(self, uid: int, name: str, plugin: str, handler: str, args: list):
         if plugin not in self.plugins:
@@ -804,11 +793,9 @@ class dataManager:
         try:
             handlerCallable = self.plugins[plugin]['handlers'].__getattribute__(
                 handler)
-            self.runningTasks[taskId] = \
-                threading.Thread(
-                target=handlerCallable, args=(self, self.taskInfo(self.db, taskId), args))
-            self.runningTasks[taskId].start()
-            
+            threading.Thread(
+                target=handlerCallable, args=(self, self.taskInfo(self.db, taskId), args)).start()
+
             return utils.makeResult(True, "success")
         except AttributeError:
             return utils.makeResult(False, "specified handler not exist")
@@ -824,11 +811,6 @@ class dataManager:
             return utils.makeResult("user isn't the owner of this task")
 
         self.db.query("delete from taskList where id = ?", (taskId, ))
-
-        if taskId in self.runningTasks:
-            if self.runningTasks[taskId].is_alive():
-                self.runningTasks[taskId].terminate()
-                del self.runningTasks[taskId]
 
         return utils.makeResult(True, "success")
 

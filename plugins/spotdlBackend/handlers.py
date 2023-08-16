@@ -9,7 +9,7 @@ def downloadMusic(taskInfo, searchParam: str, realSavePath: str, proxyType: bool
         env['http_proxy'] = proxyUrl
         env['https_proxy'] = proxyUrl
     
-    cmdline = f'python3 -m spotdl --audio youtube --lyrics musixmatch --format mp3 --bitrate auto download "{searchParam}"'
+    cmdline = f'python3 -m spotdl --audio youtube-music --lyrics musixmatch --format mp3 --bitrate auto download "{searchParam}"'
     process = subprocess.Popen(cmdline, shell=True, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=realSavePath)
     
     logs = []
