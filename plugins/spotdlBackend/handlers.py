@@ -13,13 +13,11 @@ def downloadMusic(taskInfo, searchParam: str, realSavePath: str, proxyType: bool
     process = subprocess.Popen(cmdline, shell=True, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=realSavePath)
     
     logs = []
+    logText = ''
     try:
         while process.poll() is None:
-            time.sleep(0.5)
-            for i in process.stdout.readlines()[-100:]:
-                logs.append(i)
+            logs.append(process.stdout.readline())
             logs = logs[-100:]
-            logText = ''
             for i in logs:
                 logText += i
                 

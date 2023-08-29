@@ -553,6 +553,12 @@ class dataManager:
     def getPlaylistSongsCount(self, playlistId: int):
         return self.db.query("select count(1) as count from songlist where playlistId = ?", (playlistId, ), one=True)['count']
 
+    def increasePlaylistPlayCount(self, playlistId: int):
+        if self.checkUserPlaylistIfExistByPlaylistId(playlistId) is None:
+            return utils.makeResult(False, "playlist not exist")
+        
+        return self.db.query("update playlists set playCount = ? where playlistId = ?", (self.db.query("select playCount from playlists where id = ?", (playlistId, ), one=True)['playCount']+1, playlistId))
+
     def insertSongToPlaylist(self, playlistId: int, songPath: str):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
         if data is None:
@@ -575,7 +581,7 @@ class dataManager:
         if self.checkIfSongExistInPlaylistById(playlistId, songId) is None:
             return utils.makeResult(False, "the song isn't in the playlist")
 
-        self.db.query("delete from songlist where id = ?", (songId))
+        self.db.query("delete from songlist where id = ?", (songId, ))
         return utils.makeResult(True, "success")
 
     def queryUserPlaylistSongs(self, playlistId: int):
@@ -584,7 +590,7 @@ class dataManager:
             return utils.makeResult(False, "playlist not exist")
 
         songs = self.db.query(
-            "select * from songlist where playlistId = ? order by sortId desc", (playlistId))
+            "select * from songlist where playlistId = ? order by sortId desc", (playlistId, ))
 
         for i in songs:
             i['info'] = utils.getSongInfo(utils.catchError(
