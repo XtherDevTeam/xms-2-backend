@@ -6,6 +6,7 @@ drop table if exists shareLinksList;
 drop table if exists articles;
 drop table if exists taskList;
 drop table if exists settings;
+drop table if exists playCount;
 
 create table users (
     id                  integer primary key autoincrement,
@@ -81,6 +82,13 @@ create table taskList (
     creationTime        string not null,
     endTime             string default '0000-00-00 00:00:00',
     owner               integer not null
+);
+
+create table playCount (
+    id                  integer primary key autoincrement,
+    path                string not null,
+    owner               integer,
+    plays               integer default 0
 );
 
 insert into config (serverId) values ("YoimiyaGaTaisukidesu");

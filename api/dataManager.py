@@ -318,6 +318,8 @@ class dataManager:
             base = f"{base['data']}/{path}"
             try:
                 if os.path.isfile(base):
+                    self.db.query("delete from playCount where path = ?", (path, ))
+                    self.db.query("delete from songList where path = ?", (path, ))
                     os.remove(base)
                 else:
                     utils.rmdir(base)
@@ -378,6 +380,8 @@ class dataManager:
                 "select id from users where id = ?", (uid, ), one=True)
             if d is not None:
                 return d['id']
+            else:
+                return None
         except sqlite3.Error as e:
             return None
 
@@ -509,9 +513,8 @@ class dataManager:
             "select id from songlist where playlistId = ? order by sortId desc limit ?", (playlistId, 1), one=True)
         blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
         if data == None:
-            with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
-                return utils.makeResult(True, {"artwork": default.read(), "mime": "image/jpeg"})
-
+            with open(f'{blobPath}/defaultArtwork.png', 'rb') as default:
+                return utils.makeResult(True, {"artwork": default.read(), "mime": "image/png"})
         return self.querySongArtworkFromPlaylist(data['id'])
 
     def createUserPlaylist(self, uid: int, name: str, description: str):
@@ -557,8 +560,24 @@ class dataManager:
         if self.checkUserPlaylistIfExistByPlaylistId(playlistId) is None:
             return utils.makeResult(False, "playlist not exist")
         
-        return self.db.query("update playlists set playCount = ? where playlistId = ?", (self.db.query("select playCount from playlists where id = ?", (playlistId, ), one=True)['playCount']+1, playlistId))
+        self.db.query("update playlists set playCount = ? where id = ?", (self.db.query("select playCount from playlists where id = ?", (playlistId, ), one=True)['playCount']+1, playlistId))
+        return utils.makeResult(True, "success")
 
+    def increaseSongPlayCount(self, uid: int, songId: int):
+        if self.checkIfUserExistById(uid) is None:
+            return utils.makeResult(False, "user not exist")
+        
+        data = self.querySongFromPlaylist(songId)
+        
+        if data["ok"]:
+            print(data)
+            plays = self.db.query("select plays from playCount where path = ? and owner = ?", (data["data"]["path"], uid), one=True)["plays"]
+            plays += 1
+            self.db.query("update playCount set plays = ? where path = ? and owner = ?", (plays, data["data"]["path"], uid))
+            return utils.makeResult(True, "success")
+        
+        return utils.makeResult(False, "song not exist")
+    
     def insertSongToPlaylist(self, playlistId: int, songPath: str):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
         if data is None:
@@ -569,6 +588,8 @@ class dataManager:
 
         self.db.query(
             "insert into songlist (path, playlistId, sortId) values (?, ?, ?)", (songPath, playlistId, self.getPlaylistSongsCount(playlistId)))
+        self.db.query(
+            "insert into playCount (path, owner) values (?, ?)", (songPath, data['owner']))
 
         return utils.makeResult(
             True, self.checkIfSongExistInPlaylistByPath(playlistId, songPath)['id'])
@@ -611,6 +632,7 @@ class dataManager:
         songInfo = utils.getSongInfo(utils.catchError(
             self.logger(), self.queryFileRealpath(playlist['owner'], data['path']))['path'])
         songInfo['owner'] = playlist['owner']
+        songInfo['path'] = data['path']
 
         return utils.makeResult(True, songInfo)
 
@@ -630,8 +652,8 @@ class dataManager:
             print(e)
             blobPath = utils.catchError(self.logger(), self.getXmsBlobPath())
 
-            with open(f'{blobPath}/defaultArtwork.jpg', 'rb') as default:
-                return utils.makeResult(True, {"artwork": default.read(), "mime": "image/jpeg"})
+            with open(f'{blobPath}/defaultArtwork.png', 'rb') as default:
+                return utils.makeResult(True, {"artwork": default.read(), "mime": "image/png"})
 
     def updatePlaylistInfo(self, playlistId: int, uid: int, name: str, description: str):
         data = self.checkUserPlaylistIfExistByPlaylistId(playlistId)
@@ -718,7 +740,7 @@ class dataManager:
         data = self.queryShareLink(linkId)
         if not data['ok']:
             return data
-        if data['data']['owner'] != uid:
+        if data['data']['owner']['id'] != uid:
             return utils.makeResult(False, "user isn't the owner of the share link")
         self.db.query(
             "delete from shareLinksList where id = ?", (linkId, ))

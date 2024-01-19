@@ -527,6 +527,23 @@ def routeMusicSongInfo(id):
     return api.utils.makeResult(True, songInfo)
 
 
+@webApplication.route("/xms/v1/music/song/<id>/increasePlayCount", methods=["POST"])
+def routeMusicSongIncreasePlayCount(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    return dataManager.increaseSongPlayCount(uid, id)
+
+@webApplication.route("/xms/v1/music/playlist/<id>/increasePlayCount", methods=["POST"])
+def routePlaylistIncreasePlayCount(id):
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    return dataManager.increasePlaylistPlayCount(id)
+
+
 @webApplication.route("/xms/v1/music/playlist/<id>/artwork")
 def routePlaylistArtwork(id):
     uid = checkIfLoggedIn()

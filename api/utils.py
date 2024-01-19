@@ -70,8 +70,9 @@ def getSongInfo(songPath: str):
 
 def getSongArtwork(songPath: str):
     file = music_tag.load_file(songPath)
+    print("where's my change", file['artwork'].first)
     return {
-        'mime': file['artwork'].first.mime,  
+        'mime': 'image/png',  
         'artwork': file['artwork'].first.data  
     }
 
