@@ -64,7 +64,8 @@ def getSongInfo(songPath: str):
         'title': file['title'].value,  
         'album': file['album'].value,  
         'artist': file['artist'].value,  
-        'composer': file['composer'].value,  
+        'composer': file['composer'].value,
+        'length': int(file['#length'].value)
     }
 
 
