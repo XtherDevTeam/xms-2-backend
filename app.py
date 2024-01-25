@@ -5,6 +5,8 @@ import logging
 import time
 import os
 import re
+import api.flaskSession
+import json
 from io import BytesIO
 
 import api.dataManager
@@ -26,31 +28,44 @@ flask_cors.CORS(webApplication)
 def checkIfLoggedIn():
     return flask.session.get("loginState")
 
+def checkIfLoggedInSession(s):
+    return json.loads(api.flaskSession.decode(s))['loginState']
+
+
+def parseRequestRange(s, flen):
+    s = s[s.find('=')+1:]
+    c = s.split('-')
+    if len(c) != 2:
+        return None
+    else:
+        if c[0] == '' and c[1] == '':
+            return [0, flen - 1]
+        elif c[1] == '':
+            return [int(c[0]), flen - 1]
+        elif c[0] == '':
+            return [flen - int(c[1]) - 1, flen - 1]
+        else:
+            return [int(i) for i in c]
+
 
 def makeFileResponse(path, mime):
     isPreview = not mime.startswith('application')
     if flask.request.headers.get('Range') != None:
-        startIndex = 0
-        part_length = 2 * 1024 * 1024
-        startIndex = int(flask.request.headers.get('Range')[flask.request.headers.get(  # type:ignore
-            'Range').find('=')+1:flask.request.headers.get('Range').find('-')])  # type:ignore
-        endIndex = startIndex + part_length - 1
         fileLength = os.path.getsize(path)
-
-        if endIndex > fileLength:
-            endIndex = fileLength - 1
-
+        
+        reqRange = parseRequestRange(flask.request.headers.get('Range'), fileLength)
+        
         response_file = bytes()
 
         with open(path, 'rb') as file:
-            file.seek(startIndex)
-            response_file = file.read(part_length)
+            file.seek(reqRange[0])
+            response_file = file.read(reqRange[1] - reqRange[0] + 1)
 
         response = flask.make_response(response_file)
         response.headers['Accept-Ranges'] = 'bytes'
         response.headers['Content-Range'] = 'bytes ' + \
-            str(startIndex) + '-' + \
-            str(endIndex) + '/' + str(fileLength)
+            str(reqRange[0]) + '-' + \
+            str(reqRange[1]) + '/' + str(fileLength)
         response.headers['Content-Type'] = mime
         if response.headers['Content-Type'].startswith('application'):
             response.headers['Content-Disposition'] = "attachment; filename=" + \
@@ -576,6 +591,28 @@ def routeMusicSongArtwork(id):
         return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
     else:
         return data
+    
+@webApplication.route("/xms/v1/mobile/music/song/<id>/artwork", methods=["GET"])
+def routeMobileMusicSongArtwork(id):
+    session = flask.request.args.get('session')
+    if session is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    
+    uid = checkIfLoggedInSession(session)
+
+    songInfo = dataManager.querySongFromPlaylist(id)
+    if not songInfo['ok']:
+        return songInfo
+
+    songInfo = songInfo['data']
+    if songInfo['owner'] != uid:
+        return api.utils.makeResult(False, "permission denied")
+
+    data = dataManager.querySongArtworkFromPlaylist(id)
+    if data['ok']:
+        return flask.send_file(BytesIO(data['data']['artwork']), data['data']['mime'])
+    else:
+        return data
 
 
 @webApplication.route("/xms/v1/music/playlist/<id>/songs/<sid>/file", methods=["GET"])
@@ -583,6 +620,30 @@ def routeMusicPlaylistSongsFile(id, sid):
     uid = checkIfLoggedIn()
     if uid is None:
         return api.utils.makeResult(False, "user haven't logged in yet")
+    d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
+    if d is None:
+        return api.utils.makeResult(False, "playlist not exist")
+    if d['owner'] != uid:
+        return api.utils.makeResult(False, "user isn't the owner of playlist")
+
+    data = dataManager.db.query(
+        "select id, path from songlist where id = ?", (sid, ), one=True)
+    if data is None:
+        return api.utils.makeResult(False, f'SongId({sid}) not exist')
+
+    path = api.utils.catchError(
+        webLogger, dataManager.queryFileRealpath(uid, data['path']))
+    return makeFileResponse(path['path'], path['mime'])
+
+
+@webApplication.route("/xms/v1/mobile/music/playlist/<id>/songs/<sid>/file", methods=["GET"])
+def routeMobileMusicPlaylistSongsFile(id, sid):
+    session = flask.request.args.get('session')
+    if session is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    
+    uid = checkIfLoggedInSession(session)
+    
     d = dataManager.checkUserPlaylistIfExistByPlaylistId(int(id))
     if d is None:
         return api.utils.makeResult(False, "playlist not exist")
