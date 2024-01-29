@@ -586,8 +586,9 @@ class dataManager:
         if self.checkIfSongExistInPlaylistByPath(playlistId, songPath) is not None:
             return utils.makeResult(False, "the song has already been in the playlist")
 
+        sortId = self.db.query('select sortId from songlist order by sortId desc limit 1', one=True)
         self.db.query(
-            "insert into songlist (path, playlistId, sortId) values (?, ?, ?)", (songPath, playlistId, self.getPlaylistSongsCount(playlistId)))
+            "insert into songlist (path, playlistId, sortId) values (?, ?, ?)", (songPath, playlistId, sortId['sortId'] + 1 if sortId is not None else 0))
         self.db.query(
             "insert into playCount (path, owner) values (?, ?)", (songPath, data['owner']))
 
@@ -824,7 +825,7 @@ class dataManager:
             threading.Thread(
                 target=handlerCallable, args=(self, self.taskInfo(self.db, taskId), args)).start()
 
-            return utils.makeResult(True, "success")
+            return utils.makeResult(True, taskId)
         except AttributeError:
             return utils.makeResult(False, "specified handler not exist")
         except TypeError:

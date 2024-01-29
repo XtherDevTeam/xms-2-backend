@@ -449,7 +449,7 @@ def routeDriveUpload():
 
     for i in flask.request.files:
         j = flask.request.files[i]
-        webLogger.info(f"uploading files: {i} {j.filename}")
+        print(f"uploading files: {i} {j.filename}")
         result = dataManager.queryFileUploadRealpath(
             uid, f"{path}/{j.filename}")
         if result['ok']:
@@ -458,6 +458,34 @@ def routeDriveUpload():
             return result
 
     return api.utils.makeResult(True, "success")
+
+
+@webApplication.route("/xms/v1/mobile/drive/upload", methods=["POST"])
+def routeMobileDriveUpload():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    filename = flask.request.args.get("filename", type=str)
+    if filename is None or not isinstance(filename, str):
+        return api.utils.makeResult(False, "invalid request")
+    
+    path = flask.request.args.get("path", type=str)
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    for i in flask.request.files:
+        j = flask.request.files[i]
+        print(f"uploading files12321312312: {i} {filename}")
+        result = dataManager.queryFileUploadRealpath(
+            uid, f"{path}/{filename}")
+        if result['ok']:
+            j.save(result['data'])
+        else:
+            return result
+
+    return api.utils.makeResult(True, "success")
+
 
 
 @webApplication.route("/xms/v1/music/playlist/create", methods=["POST"])
