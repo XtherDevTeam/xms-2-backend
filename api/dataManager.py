@@ -853,3 +853,14 @@ class dataManager:
             return utils.makeResult(True, "success")
         else:
             return utils.makeResult(False, "user not exist")
+
+
+    def queryMusicStatistics(self, uid):
+        if self.checkIfUserExistById(uid) is not None:
+            raw = self.db.query('select * from playCount where owner = ? order by plays desc limit 100', (uid, ))
+            for i in raw:
+                i['info'] = utils.getSongInfo(utils.catchError(
+                    self.logger(), self.queryFileRealpath(uid, i['path']))['path'])
+            return utils.makeResult(True, raw)
+        else:
+            return utils.makeResult(False, "user not exist")

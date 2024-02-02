@@ -487,6 +487,14 @@ def routeMobileDriveUpload():
     return api.utils.makeResult(True, "success")
 
 
+@webApplication.route("/xms/v1/music/statistics", methods=["GET"])
+def routeMusicStatistics():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    else:
+        return dataManager.queryMusicStatistics(uid)
+
 
 @webApplication.route("/xms/v1/music/playlist/create", methods=["POST"])
 def routeMusicPlaylistCreate():
