@@ -589,8 +589,9 @@ class dataManager:
         sortId = self.db.query('select sortId from songlist order by sortId desc limit 1', one=True)
         self.db.query(
             "insert into songlist (path, playlistId, sortId) values (?, ?, ?)", (songPath, playlistId, sortId['sortId'] + 1 if sortId is not None else 0))
-        self.db.query(
-            "insert into playCount (path, owner) values (?, ?)", (songPath, data['owner']))
+        if len(self.db.query('select 1 from playCount where path = ?', (songPath, ))) == 0:
+            self.db.query(
+                "insert into playCount (path, owner) values (?, ?)", (songPath, data['owner']))
 
         return utils.makeResult(
             True, self.checkIfSongExistInPlaylistByPath(playlistId, songPath)['id'])
@@ -857,7 +858,7 @@ class dataManager:
 
     def queryMusicStatistics(self, uid):
         if self.checkIfUserExistById(uid) is not None:
-            raw = self.db.query('select * from playCount where owner = ? order by plays desc limit 100', (uid, ))
+            raw = self.db.query('select * from playCount where owner = ? and plays != 0 order by plays desc limit 100', (uid, ))
             for i in raw:
                 i['info'] = utils.getSongInfo(utils.catchError(
                     self.logger(), self.queryFileRealpath(uid, i['path']))['path'])
