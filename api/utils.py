@@ -59,14 +59,17 @@ def copy(path: str, newPath: str):
 
 
 def getSongInfo(songPath: str):
-    file = music_tag.load_file(songPath)
-    return {
-        'title': file['title'].value,  
-        'album': file['album'].value,  
-        'artist': file['artist'].value,  
-        'composer': file['composer'].value,
-        'length': int(file['#length'].value)
-    }
+    try: 
+        file = music_tag.load_file(songPath)
+        return {
+            'title': file['title'].value,  
+            'album': file['album'].value,  
+            'artist': file['artist'].value,  
+            'composer': file['composer'].value,
+            'length': int(file['#length'].value)
+        }
+    except:
+        raise RuntimeError("getSongInfo(): mutagen failed")
 
 
 def getSongArtwork(songPath: str):

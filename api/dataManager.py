@@ -371,7 +371,7 @@ class dataManager:
             return utils.makeResult(False, "user not exist")
         else:
             self.deleteUserDrive(uid)
-            self.db.query("delete from users where id = ?")
+            self.db.query("delete from users where id = ?", (uid, ))
             return utils.makeResult(True, "success")
 
     def checkIfUserExistById(self, uid: int):
@@ -616,8 +616,17 @@ class dataManager:
             "select * from songlist where playlistId = ? order by sortId desc", (playlistId, ))
 
         for i in songs:
-            i['info'] = utils.getSongInfo(utils.catchError(
-                self.logger(), self.queryFileRealpath(data['owner'], i['path']))['path'])
+            try:
+                i['info'] = utils.getSongInfo(utils.catchError(
+                    self.logger(), self.queryFileRealpath(data['owner'], i['path']))['path'])
+            except RuntimeError:
+                i['info'] = {
+                    'title': '',  
+                    'album': '',  
+                    'artist': '',  
+                    'composer': '',
+                    'length': 0
+                }
 
         return utils.makeResult(True, songs)
 

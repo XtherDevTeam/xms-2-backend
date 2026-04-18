@@ -955,7 +955,7 @@ def userManageCreate():
         return dataManager.createUser(data['name'], data['password'], data['slogan'], data['level'])
     else:
         return api.utils.makeResult(False, "permission denied")
-
+    
 
 if __name__ == "__main__":
     # print(dataManager.executeInitScript())
