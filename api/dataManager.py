@@ -355,6 +355,22 @@ class dataManager:
         else:
             return base
 
+    def updateFileInUserDrive(self, uid: int, path: str, content: str):
+        base = self.getUserDrivePath(uid)
+        if base['ok']:
+            base = f"{base['data']}/{path}"
+            try:
+                if os.path.isfile(base):
+                    with open(base, 'w', encoding='utf-8') as file:
+                        file.write(content)
+                    return utils.makeResult(True, "success")
+                else:
+                    return utils.makeResult(False, f"not a file: {path}")
+            except OSError as e:
+                return utils.makeResult(False, str(e))
+        else:
+            return base
+
     def queryUser(self, uid: int):
         try:
             d = self.db.query(
