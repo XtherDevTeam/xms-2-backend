@@ -458,6 +458,22 @@ def routeDriveUpload():
             return result
 
     return api.utils.makeResult(True, "success")
+    
+    
+@webApplication.route("/xms/v1/drive/update", methods=["POST"])
+def routeDriveUpdate():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+    data = flask.request.get_json()
+    path = data.get('path')
+    content = data.get('content')
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+    if content is None or not isinstance(content, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    return dataManager.updateFileInUserDrive(uid, path, content)
 
 
 @webApplication.route("/xms/v1/mobile/drive/upload", methods=["POST"])
