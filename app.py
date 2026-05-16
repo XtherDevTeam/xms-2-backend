@@ -973,6 +973,46 @@ def userManageCreate():
         return api.utils.makeResult(False, "permission denied")
     
 
+@webApplication.route("/xms/v1/convert/pdf", methods=["GET", "POST"])
+def routeConvertPdf():
+    uid = checkIfLoggedIn()
+    if uid is None:
+        return api.utils.makeResult(False, "user haven't logged in yet")
+
+    if flask.request.method == "POST":
+        data = flask.request.get_json(silent=True) or {}
+        path = data.get('path')
+    else:
+        path = flask.request.args.get('path')
+
+    if path is None or not isinstance(path, str):
+        return api.utils.makeResult(False, "invalid request")
+
+    try:
+        result = dataManager.queryFileRealpath(uid, path)
+        if not result['ok']:
+            return result
+        
+        real_path = result['data']['path']
+        mime = result['data']['mime']
+        filename = os.path.basename(path)
+
+        url = "https://demo.gotenberg.dev/forms/libreoffice/convert"
+        with open(real_path, 'rb') as f:
+            files = {'files': (filename, f, mime)}
+            response = requests.post(url, files=files, timeout=60)
+            
+            if response.status_code == 200:
+                pdf_name = os.path.splitext(filename)[0] + '.pdf'
+                return flask.send_file(BytesIO(response.content), mimetype='application/pdf', download_name=pdf_name, as_attachment=False)
+            else:
+                return api.utils.makeResult(False, f"conversion failed: {response.status_code} {response.text}")
+    except OSError as e:
+        return api.utils.makeResult(False, str(e))
+    except Exception as e:
+        return api.utils.makeResult(False, f"conversion error: {str(e)}")
+
+
 if __name__ == "__main__":
     # print(dataManager.executeInitScript())
     webApplication.config[
